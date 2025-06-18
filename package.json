@@ -13,7 +13,8 @@
     "@supabase/supabase-js": "^2.39.3",
     "@vitejs/plugin-react-swc": "^3.10.2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "serve": "^14.2.0"
   },
   "devDependencies": {
     "@radix-ui/react-dialog": "^1.1.14",
