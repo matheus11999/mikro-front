@@ -7,7 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "start": "vite preview --port $PORT"
+    "start": "serve -s dist -l $PORT"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.3",
