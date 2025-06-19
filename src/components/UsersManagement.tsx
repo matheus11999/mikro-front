@@ -11,6 +11,7 @@ const UsersManagement = () => {
   
   const [formData, setFormData] = useState({
     name: '',
+    email: '',
     username: '',
     password: '',
     pixKey: '',
@@ -31,7 +32,7 @@ const UsersManagement = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const email = formData.username.trim();
+    const email = formData.email.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setError('E-mail inválido.');
       setLoading(false);
@@ -39,7 +40,11 @@ const UsersManagement = () => {
     }
     if (editingUser) {
       // Atualizar usuário no Supabase
-      await supabase.from('clientes').update({ nome: formData.name, pixKey: formData.pixKey, whatsapp: formData.whatsapp }).eq('id', editingUser.id);
+      await supabase.from('clientes').update({ 
+        nome: formData.name, 
+        pixKey: formData.pixKey, 
+        whatsapp: formData.whatsapp 
+      }).eq('id', editingUser.id);
     } else {
       // Verifica se já existe usuário com o mesmo e-mail
       const { data: existing, error: existingError } = await supabase.from('clientes').select('id').eq('email', email);
@@ -56,24 +61,34 @@ const UsersManagement = () => {
         return;
       }
       // Cria registro na tabela clientes
-      await supabase.from('clientes').insert([{ nome: formData.name, email, saldo: 0, role: 'user', pixKey: formData.pixKey, whatsapp: formData.whatsapp || null }]);
+      const username = formData.username || email.split('@')[0];
+      await supabase.from('clientes').insert([{ 
+        nome: formData.name, 
+        email, 
+        username,
+        saldo: 0, 
+        role: 'user', 
+        pixKey: formData.pixKey, 
+        whatsapp: formData.whatsapp || null 
+      }]);
     }
     // Atualizar lista
     const { data } = await supabase.from('clientes').select('*');
     setUsers(data || []);
     setShowModal(false);
     setEditingUser(null);
-    setFormData({ name: '', username: '', password: '', pixKey: '', whatsapp: '' });
+    setFormData({ name: '', email: '', username: '', password: '', pixKey: '', whatsapp: '' });
     setLoading(false);
   };
 
   const handleEdit = (user: any) => {
     setEditingUser(user);
     setFormData({
-      name: user.name,
-      username: user.username,
+      name: user.nome || user.name,
+      email: user.email || '',
+      username: user.username || '',
       password: '',
-      pixKey: user.pixKey,
+      pixKey: user.pixKey || '',
       whatsapp: user.whatsapp || ''
     });
     setShowModal(true);
@@ -108,11 +123,11 @@ const UsersManagement = () => {
           <p className="text-gray-600 mt-1">Controle e administração de usuários</p>
         </div>
         <button
-          onClick={() => {
-            setEditingUser(null);
-            setFormData({ name: '', username: '', password: '', pixKey: '', whatsapp: '' });
-            setShowModal(true);
-          }}
+                  onClick={() => {
+          setEditingUser(null);
+          setFormData({ name: '', email: '', username: '', password: '', pixKey: '', whatsapp: '' });
+          setShowModal(true);
+        }}
           className="mt-4 sm:mt-0 btn-primary flex items-center"
         >
           <UserPlus className="w-4 h-4 mr-2" />
@@ -141,7 +156,7 @@ const UsersManagement = () => {
             </div>
             <div className="ml-4">
               <p className="text-xl font-bold text-gray-900">
-                {users.filter(u => u.status === 'active').length}
+                {users.filter(u => (u.status || 'active') === 'active').length}
               </p>
               <p className="text-sm text-gray-600">Usuários Ativos</p>
             </div>
@@ -155,7 +170,7 @@ const UsersManagement = () => {
             </div>
             <div className="ml-4">
               <p className="text-xl font-bold text-gray-900">
-                {users.reduce((sum, user) => sum + user.mikrotiks, 0)}
+                {users.reduce((sum, user) => sum + (user.mikrotiks || 0), 0)}
               </p>
               <p className="text-sm text-gray-600">Mikrotiks Vinculados</p>
             </div>
@@ -207,37 +222,37 @@ const UsersManagement = () => {
                 <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                      <p className="text-sm text-gray-500">@{user.username}</p>
+                      <p className="text-sm font-medium text-gray-900">{user.nome || user.name}</p>
+                      <p className="text-sm text-gray-500">{user.email}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm font-mono bg-blue-50 text-blue-800 px-2 py-1 rounded">
-                      {user.pixKey}
+                      {user.pixKey || 'Não informado'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                      {user.mikrotiks}
+                      {user.mikrotiks || 0}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-semibold text-green-600">{user.profit}</span>
+                    <span className="text-sm font-semibold text-green-600">R$ {(user.saldo || 0).toFixed(2)}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
                       onClick={() => toggleStatus(user.id)}
                       className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
-                        user.status === 'active'
+                        (user.status || 'active') === 'active'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {user.status === 'active' ? 'Ativo' : 'Inativo'}
+                      {(user.status || 'active') === 'active' ? 'Ativo' : 'Inativo'}
                     </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+                    {user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex space-x-2">
@@ -281,6 +296,12 @@ const UsersManagement = () => {
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                  {error}
+                </div>
+              )}
+              
               <div className="form-group">
                 <label className="form-label">Nome Completo</label>
                 <input
@@ -289,6 +310,19 @@ const UsersManagement = () => {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input-field"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">E-mail</label>
+                <input
+                  type="email"
+                  required={!editingUser}
+                  disabled={editingUser}
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="input-field"
+                  placeholder="usuario@exemplo.com"
                 />
               </div>
               
@@ -348,9 +382,10 @@ const UsersManagement = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 btn-primary"
+                  disabled={loading}
+                  className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {editingUser ? 'Atualizar' : 'Criar'}
+                  {loading ? 'Processando...' : (editingUser ? 'Atualizar' : 'Criar')}
                 </button>
               </div>
             </form>
