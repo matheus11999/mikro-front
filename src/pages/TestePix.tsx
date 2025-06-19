@@ -215,7 +215,6 @@ export default function TestePix() {
   useEffect(() => {
     if (response && response.status === 'pendente' && mac && selectedMikrotik && selectedPlano) {
       const interval = setInterval(() => {
-        // Chama a rota /verify corretamente
         fetch(`${apiUrl}/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -227,6 +226,9 @@ export default function TestePix() {
       return () => clearInterval(interval);
     }
   }, [response, mac, selectedMikrotik, selectedPlano, apiUrl]);
+
+  // Exibir mensagem de polling
+  const isPolling = response && response.status === 'pendente';
 
   // Exibir erro se não houver senha disponível
   {error && error.code === 'NO_PASSWORD_AVAILABLE' && (
@@ -471,6 +473,11 @@ export default function TestePix() {
                 <Label>Senha entregue:</Label><br />
                 <b>Usuário: {response.senha.usuario}</b><br />
                 <b>Senha: {response.senha.senha}</b>
+              </div>
+            )}
+            {isPolling && (
+              <div style={{ color: '#555', margin: '12px 0', fontWeight: 'bold' }}>
+                Próxima Consulta do Pagamento em 5 segundos. Status Pagamento: <span style={{ color: '#e67e22' }}>Pendente</span>
               </div>
             )}
           </CardContent>
