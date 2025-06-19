@@ -86,6 +86,7 @@ export default function TestePix() {
   const [pollingActive, setPollingActive] = useState(false);
   const [pollingTime, setPollingTime] = useState(0);
   const [pollingProgress, setPollingProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -254,20 +255,42 @@ export default function TestePix() {
           body: JSON.stringify({ mac, mikrotik_id: selectedMikrotik })
         });
 
+        if (!statusResponse.ok) {
+          throw new Error(`HTTP ${statusResponse.status}: ${statusResponse.statusText}`);
+        }
+
         const data = await statusResponse.json();
-        setResponse(data);
         
-        addLog('info', 'Verificação automática de pagamento', data);
+        // Validar e normalizar dados
+        if (!data || typeof data !== 'object') {
+          throw new Error('Resposta inválida do servidor');
+        }
+
+        const normalizedData = {
+          ...data,
+          total_vendas: data.total_vendas || 0,
+          total_gasto: data.total_gasto || 0,
+          ultimo_valor: data.ultimo_valor || 0,
+          pagamento_pendente: data.pagamento_pendente ? {
+            ...data.pagamento_pendente,
+            valor: data.pagamento_pendente.valor || 0
+          } : null
+        };
+
+        setResponse(normalizedData);
+        addLog('info', 'Verificação automática de pagamento', normalizedData);
 
         // Se o pagamento foi aprovado ou o status mudou
-        if (data.status === 'autenticado' || 
-            (data.pagamento_pendente && data.pagamento_pendente.status === 'approved' && data.username)) {
+        if (normalizedData.status === 'autenticado' || 
+            (normalizedData.pagamento_pendente && normalizedData.pagamento_pendente.status === 'approved' && normalizedData.username)) {
           stopPolling();
           addLog('success', '🎉 Pagamento aprovado! Senha liberada!');
           toast.success('Pagamento aprovado com sucesso!');
         }
       } catch (error) {
-        addLog('error', 'Erro na verificação automática', error);
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+        addLog('error', 'Erro na verificação automática', errorMessage);
+        // Não parar o polling por um erro temporário, apenas logar
       }
     }, 5000);
   }, [mac, selectedMikrotik, response, apiUrl, stopPolling, addLog]);
@@ -280,6 +303,7 @@ export default function TestePix() {
     }
 
     setLoading(true);
+    setError(null);
     stopPolling();
 
     try {
@@ -292,17 +316,41 @@ export default function TestePix() {
         body: JSON.stringify({ mac, mikrotik_id: selectedMikrotik })
       });
 
+      if (!statusResponse.ok) {
+        throw new Error(`HTTP ${statusResponse.status}: ${statusResponse.statusText}`);
+      }
+
       const data = await statusResponse.json();
-      setResponse(data);
-      addLog('success', 'Resposta recebida de status:', data);
+      
+      // Validar dados recebidos
+      if (!data || typeof data !== 'object') {
+        throw new Error('Resposta inválida do servidor');
+      }
+
+      // Garantir que campos numéricos tenham valores padrão
+      const normalizedData = {
+        ...data,
+        total_vendas: data.total_vendas || 0,
+        total_gasto: data.total_gasto || 0,
+        ultimo_valor: data.ultimo_valor || 0,
+        pagamento_pendente: data.pagamento_pendente ? {
+          ...data.pagamento_pendente,
+          valor: data.pagamento_pendente.valor || 0
+        } : null
+      };
+
+      setResponse(normalizedData);
+      addLog('success', 'Resposta recebida de status:', normalizedData);
 
       // Se tem pagamento pendente, inicia polling
-      if (data.pagamento_pendente && data.pagamento_pendente.status !== 'approved') {
+      if (normalizedData.pagamento_pendente && normalizedData.pagamento_pendente.status !== 'approved') {
         startPolling();
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setError(errorMessage);
       addLog('error', 'Erro ao verificar status', error);
-      toast.error('Erro ao verificar status');
+      toast.error(`Erro ao verificar status: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -328,6 +376,7 @@ export default function TestePix() {
     }
 
     setLoading(true);
+    setError(null);
     stopPolling();
 
     try {
@@ -355,35 +404,45 @@ export default function TestePix() {
       const pixData = await pixResponse.json();
       
       if (!pixResponse.ok) {
-        throw new Error(pixData.error || 'Erro ao gerar PIX');
+        throw new Error(pixData.error || `HTTP ${pixResponse.status}: ${pixResponse.statusText}`);
+      }
+
+      // Validar dados recebidos
+      if (!pixData || typeof pixData !== 'object') {
+        throw new Error('Resposta inválida do servidor');
       }
 
       addLog('success', 'PIX gerado com sucesso!', pixData);
       
-      // Atualiza o response com os dados do pagamento
-      setResponse({
+      // Atualiza o response com os dados do pagamento - garantindo valores seguros
+      const normalizedResponse = {
         status: 'pendente',
         mac,
         mikrotik_id: selectedMikrotik,
         total_vendas: 0,
         total_gasto: 0,
+        ultimo_valor: 0,
         pagamento_pendente: {
           status: pixData.status || 'pending',
           pagamento_gerado_em: new Date().toISOString(),
-          chave_pix: pixData.chave_pix,
-          qrcode: pixData.qrcode,
-          valor: preco,
-          ticket_url: pixData.ticket_url,
-          payment_id: pixData.id
+          chave_pix: pixData.chave_pix || '',
+          qrcode: pixData.qrcode || '',
+          valor: preco || 0,
+          ticket_url: pixData.ticket_url || '',
+          payment_id: pixData.id || ''
         }
-      });
+      };
+
+      setResponse(normalizedResponse);
 
       // Inicia polling automático
       startPolling();
       toast.success('PIX gerado com sucesso!');
     } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setError(errorMessage);
       addLog('error', 'Erro ao gerar PIX', error);
-      toast.error(error.message || 'Erro ao gerar PIX');
+      toast.error(`Erro ao gerar PIX: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -660,6 +719,32 @@ export default function TestePix() {
 
         {/* Coluna Direita - Resposta */}
         <div className="space-y-6">
+          {/* Erro */}
+          {error && (
+            <Card className="border-destructive">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="w-5 h-5" />
+                  Erro
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Erro na operação</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setError(null)}
+                >
+                  Fechar erro
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Status da Resposta */}
           {response && (
             <Card>
@@ -686,12 +771,12 @@ export default function TestePix() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total gasto</p>
-                    <p className="font-medium">R$ {response.total_gasto.toFixed(2)}</p>
+                    <p className="font-medium">R$ {(response.total_gasto || 0).toFixed(2)}</p>
                   </div>
                   {response.ultimo_valor && (
                     <div>
                       <p className="text-sm text-muted-foreground">Último valor pago</p>
-                      <p className="font-medium">R$ {response.ultimo_valor.toFixed(2)}</p>
+                      <p className="font-medium">R$ {(response.ultimo_valor || 0).toFixed(2)}</p>
                     </div>
                   )}
                   {response.ultimo_plano && (
@@ -734,7 +819,7 @@ export default function TestePix() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Valor</p>
-                    <p className="font-bold text-lg">R$ {response.pagamento_pendente.valor.toFixed(2)}</p>
+                    <p className="font-bold text-lg">R$ {(response.pagamento_pendente.valor || 0).toFixed(2)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Gerado em</p>

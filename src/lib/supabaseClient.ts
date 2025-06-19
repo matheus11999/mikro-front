@@ -3,24 +3,34 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// Singleton pattern para evitar múltiplas instâncias
-let supabaseInstance: SupabaseClient | null = null;
+// Verificar se as variáveis de ambiente estão definidas
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_KEY são obrigatórias');
+}
 
-function getSupabaseClient() {
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseKey, {
+// Singleton pattern global para evitar múltiplas instâncias
+declare global {
+  var __supabase_client__: SupabaseClient | undefined;
+}
+
+function getSupabaseClient(): SupabaseClient {
+  if (!globalThis.__supabase_client__) {
+    globalThis.__supabase_client__ = createClient(supabaseUrl, supabaseKey, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true
+        persistSession: false, // Desabilitar sessão persistente para evitar problemas de refresh token
+        autoRefreshToken: false, // Desabilitar refresh automático
+        detectSessionInUrl: false // Desabilitar detecção de sessão na URL
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'supabase-js-web'
+        }
       }
     });
   }
-  return supabaseInstance;
+  return globalThis.__supabase_client__;
 }
 
-// Renomeado para 'supabasePublic' para clareza.
-export const supabasePublic = getSupabaseClient();
-
-// Alias para compatibilidade: módulos antigos que importam { supabase } continuarão funcionando.
-export { supabasePublic as supabase }; 
+// Exportar instância única
+export const supabase = getSupabaseClient();
+export const supabasePublic = supabase; 
