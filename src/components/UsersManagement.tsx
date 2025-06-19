@@ -14,6 +14,7 @@ const UsersManagement = () => {
     name: '',
     email: '',
     password: '',
+    chave_pix: '',
     whatsapp: ''
   });
 
@@ -42,6 +43,7 @@ const UsersManagement = () => {
       // Atualizar usuário no Supabase
       const { error: updateError } = await supabase.from('clientes').update({ 
         nome: formData.name, 
+        chave_pix: formData.chave_pix || null,
         whatsapp: formData.whatsapp 
       }).eq('id', editingUser.id);
       
@@ -84,6 +86,7 @@ const UsersManagement = () => {
         email, 
         saldo: 0, 
         role: 'user', 
+        chave_pix: formData.chave_pix || null,
         whatsapp: formData.whatsapp || null 
       }]);
       
@@ -100,7 +103,7 @@ const UsersManagement = () => {
     setUsers(data || []);
     setShowModal(false);
     setEditingUser(null);
-    setFormData({ name: '', email: '', password: '', whatsapp: '' });
+    setFormData({ name: '', email: '', password: '', chave_pix: '', whatsapp: '' });
     setLoading(false);
   };
 
@@ -110,6 +113,7 @@ const UsersManagement = () => {
       name: user.nome || user.name,
       email: user.email || '',
       password: '',
+      chave_pix: user.chave_pix || '',
       whatsapp: user.whatsapp || ''
     });
     setShowModal(true);
@@ -146,7 +150,7 @@ const UsersManagement = () => {
         <button
                   onClick={() => {
           setEditingUser(null);
-          setFormData({ name: '', email: '', password: '', whatsapp: '' });
+          setFormData({ name: '', email: '', password: '', chave_pix: '', whatsapp: '' });
           setShowModal(true);
         }}
           className="mt-4 sm:mt-0 btn-primary flex items-center"
@@ -164,7 +168,7 @@ const UsersManagement = () => {
               <Users className="w-6 h-6 text-blue-600" />
             </div>
             <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{users.length}</p>
+              <p className="text-xl font-bold text-gray-900">{filteredUsers.length}</p>
               <p className="text-sm text-gray-600">Total de Usuários</p>
             </div>
           </div>
@@ -177,7 +181,7 @@ const UsersManagement = () => {
             </div>
             <div className="ml-4">
               <p className="text-xl font-bold text-gray-900">
-                {users.filter(u => (u.status || 'active') === 'active').length}
+                {filteredUsers.filter(u => (u.status || 'active') === 'active').length}
               </p>
               <p className="text-sm text-gray-600">Usuários Ativos</p>
             </div>
@@ -230,6 +234,7 @@ const UsersManagement = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chave PIX</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WhatsApp</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -245,6 +250,11 @@ const UsersManagement = () => {
                       <p className="text-sm font-medium text-gray-900">{user.nome || user.name}</p>
                       <p className="text-sm text-gray-500">{user.email}</p>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm font-mono bg-blue-50 text-blue-800 px-2 py-1 rounded">
+                      {user.chave_pix || 'Não informado'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm text-gray-900">
@@ -350,6 +360,17 @@ const UsersManagement = () => {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="input-field"
                   placeholder={editingUser ? 'Deixe em branco para manter a atual' : ''}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">Chave PIX (opcional)</label>
+                <input
+                  type="text"
+                  value={formData.chave_pix}
+                  onChange={(e) => setFormData({ ...formData, chave_pix: e.target.value })}
+                  className="input-field"
+                  placeholder="CPF, e-mail, telefone ou chave aleatória"
                 />
               </div>
               
