@@ -135,7 +135,13 @@ export default function TestePix() {
     addLog('info', `Iniciando chamada para ${fullUrl}`);
 
     const planoSelecionado = planos.find(p => p.id === selectedPlano);
-    const precoFinal = preco || planoSelecionado?.preco.toString() || '0';
+    let precoFinal = preco !== '' ? preco : planoSelecionado?.preco;
+    precoFinal = Number(precoFinal);
+    if (isNaN(precoFinal) || precoFinal <= 0) {
+      setError({ message: 'Preço inválido. Selecione um plano ou informe um valor válido.' });
+      setLoading(false);
+      return;
+    }
 
     const payload: any = {
       mac,
@@ -144,7 +150,7 @@ export default function TestePix() {
 
     if (endpoint === 'pix') {
       payload.plano_id = selectedPlano;
-      payload.preco = parseFloat(precoFinal);
+      payload.preco = precoFinal;
       if (descricao) payload.descricao = descricao;
       // Dados padrão de pagador válidos para Mercado Pago
       payload.payer = {
