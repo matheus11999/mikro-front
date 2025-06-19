@@ -364,41 +364,60 @@ export default function TestePix() {
                 <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mt-2 text-sm whitespace-pre-wrap">
                   {JSON.stringify(error, null, 2)}
                 </pre>
-                {error.status && (
-                  <div className="mt-2">
-                    <strong>Status HTTP:</strong> {error.status} {error.statusText || ''}
-                  </div>
-                )}
-                {error.headers && (
-                  <div className="mt-2">
-                    <strong>Headers:</strong>
-                    <pre className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-xs whitespace-pre-wrap">
-                      {JSON.stringify(error.headers, null, 2)}
-                    </pre>
-                  </div>
-                )}
-                {error.payload_enviado && (
-                  <div className="mt-2">
-                    <strong>Payload Enviado:</strong>
-                    <pre className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-xs whitespace-pre-wrap">
-                      {JSON.stringify(error.payload_enviado, null, 2)}
-                    </pre>
-                  </div>
-                )}
-                {error.body && (
-                  <div className="mt-2">
-                    <strong>Corpo da resposta do Mercado Pago:</strong>
-                    <pre className="bg-gray-50 dark:bg-gray-900 p-2 rounded text-xs whitespace-pre-wrap">
-                      {JSON.stringify(error.body, null, 2)}
-                    </pre>
-                  </div>
-                )}
               </div>
             )}
             {response && (
-              <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm whitespace-pre-wrap">
-                {JSON.stringify(response, null, 2)}
-              </pre>
+              <>
+                <div className="mb-2">
+                  <b>Status:</b> {response.status}
+                </div>
+                <div className="mb-2">
+                  <b>MAC:</b> {response.mac}
+                </div>
+                <div className="mb-2">
+                  <b>Mikrotik ID:</b> {response.mikrotik_id}
+                </div>
+                <div className="mb-2">
+                  <b>Total de vendas aprovadas:</b> {response.total_vendas}
+                </div>
+                <div className="mb-2">
+                  <b>Total gasto:</b> R$ {response.total_gasto}
+                </div>
+                <div className="mb-2">
+                  <b>Último valor pago:</b> {response.ultimo_valor}
+                </div>
+                <div className="mb-2">
+                  <b>Último plano:</b> {response.ultimo_plano}
+                </div>
+                {response.status === 'pendente' && response.pagamento_pendente && (
+                  <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                    <b>Pagamento Pendente:</b>
+                    <div><b>Status:</b> {response.pagamento_pendente.status}</div>
+                    <div><b>Valor:</b> R$ {response.pagamento_pendente.valor}</div>
+                    <div><b>Chave Pix:</b> {response.pagamento_pendente.chave_pix}</div>
+                    <div><b>QR Code:</b> {response.pagamento_pendente.qrcode && <img src={`data:image/png;base64,${response.pagamento_pendente.qrcode}`} alt="QR Code Pix" style={{ maxWidth: 256, border: '1px solid #ccc', background: '#fff' }} />}</div>
+                    <div><b>Gerado em:</b> {response.pagamento_pendente.pagamento_gerado_em && new Date(response.pagamento_pendente.pagamento_gerado_em).toLocaleString()}</div>
+                    <div><b>Payment ID:</b> {response.pagamento_pendente.payment_id}</div>
+                    <div><b>Ticket URL:</b> {response.pagamento_pendente.ticket_url}</div>
+                  </div>
+                )}
+                {response.status === 'autenticado' && (
+                  <div className="mt-4 p-2 bg-green-50 border border-green-200 rounded">
+                    <b>Senha Ativa:</b>
+                    <div><b>Usuário:</b> {response.username}</div>
+                    <div><b>Senha:</b> {response.password}</div>
+                    <div><b>Plano:</b> {response.plano}</div>
+                    <div><b>Duração:</b> {response.duracao} minutos</div>
+                    <div><b>Fim:</b> {response.fim && new Date(response.fim).toLocaleString()}</div>
+                  </div>
+                )}
+                <div className="mt-4">
+                  <b>JSON completo da resposta (debug):</b>
+                  <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-xs whitespace-pre-wrap">
+                    {JSON.stringify(response, null, 2)}
+                  </pre>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
