@@ -147,6 +147,7 @@ export default function TestePix() {
         const { data: mikrotiksData, error } = await supabase
           .from('mikrotiks')
           .select('id, nome')
+          .eq('status', 'Ativo')
           .order('nome');
 
         if (error) {
