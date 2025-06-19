@@ -393,30 +393,51 @@ export default function TestePix() {
           </CardContent>
         </Card>
       </div>
-      {response && response.chave_pix && (
+      {response && (response.chave_pix || response.status === 'pendente' || response.status === 'aprovado') && (
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Pagamento Pix Gerado</CardTitle>
+            <CardTitle>Pagamento Pix</CardTitle>
           </CardHeader>
           <CardContent>
             <div style={{ marginBottom: 8 }}>
-              <Label>Valor:</Label> <b>R$ {response.transaction_amount || preco}</b>
+              <Label>Status:</Label> <b>{response.status}</b>
             </div>
-            <div style={{ marginBottom: 8 }}>
-              <Label>Chave Pix (copia e cola):</Label>
-              <Input value={response.chave_pix} readOnly onFocus={e => e.target.select()} style={{ width: '100%' }} />
-            </div>
+            {response.valor && (
+              <div style={{ marginBottom: 8 }}>
+                <Label>Valor:</Label> <b>R$ {response.valor}</b>
+              </div>
+            )}
+            {response.chave_pix && (
+              <div style={{ marginBottom: 8 }}>
+                <Label>Chave Pix (copia e cola):</Label>
+                <Input value={response.chave_pix} readOnly onFocus={e => e.target.select()} style={{ width: '100%' }} />
+              </div>
+            )}
             {response.qrcode && (
               <div style={{ marginBottom: 8 }}>
                 <Label>QR Code:</Label><br />
                 <img src={`data:image/png;base64,${response.qrcode}`} alt="QR Code Pix" style={{ maxWidth: 256, border: '1px solid #ccc', background: '#fff' }} />
               </div>
             )}
-            <div style={{ marginBottom: 8 }}>
-              <Label>Status:</Label> <b>{response.status || 'pendente'}</b>
-            </div>
+            {response.pagamento_gerado_em && (
+              <div style={{ marginBottom: 8 }}>
+                <Label>Pagamento gerado em:</Label> <b>{new Date(response.pagamento_gerado_em).toLocaleString()}</b>
+              </div>
+            )}
+            {response.pagamento_aprovado_em && (
+              <div style={{ marginBottom: 8 }}>
+                <Label>Pagamento aprovado em:</Label> <b>{new Date(response.pagamento_aprovado_em).toLocaleString()}</b>
+              </div>
+            )}
             {response.ticket_url && (
               <a href={response.ticket_url} target="_blank" rel="noopener noreferrer">Ver comprovante Mercado Pago</a>
+            )}
+            {response.senha && (
+              <div style={{ marginTop: 16, padding: 12, background: '#e6ffe6', borderRadius: 8 }}>
+                <Label>Senha entregue:</Label><br />
+                <b>Usuário: {response.senha.usuario}</b><br />
+                <b>Senha: {response.senha.senha}</b>
+              </div>
             )}
           </CardContent>
         </Card>
