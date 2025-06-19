@@ -146,7 +146,6 @@ export default function TestePix() {
         const { data: mikrotiksData, error } = await supabase
           .from('mikrotiks')
           .select('id, nome')
-          .eq('ativo', true)
           .order('nome');
 
         if (error) {
@@ -186,7 +185,6 @@ export default function TestePix() {
           .from('planos')
           .select('id, nome, preco, duracao')
           .eq('mikrotik_id', selectedMikrotik)
-          .eq('ativo', true)
           .order('preco');
 
         if (error) {
@@ -505,7 +503,7 @@ export default function TestePix() {
                   </SelectTrigger>
                   <SelectContent>
                     {mikrotiks.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-mikrotiks" disabled>
                         Nenhum Mikrotik encontrado
                       </SelectItem>
                     ) : (
@@ -545,11 +543,11 @@ export default function TestePix() {
                   </SelectTrigger>
                   <SelectContent>
                     {!selectedMikrotik ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-mikrotik-selected" disabled>
                         Selecione um Mikrotik primeiro
                       </SelectItem>
                     ) : planos.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-plans" disabled>
                         Nenhum plano disponível para este Mikrotik
                       </SelectItem>
                     ) : (
