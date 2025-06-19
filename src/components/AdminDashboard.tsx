@@ -6,6 +6,7 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState([]);
   const [recentSales, setRecentSales] = useState([]);
   const [topMikrotiks, setTopMikrotiks] = useState([]);
+  const [topUsers, setTopUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -91,6 +92,17 @@ const AdminDashboard = () => {
         revenue: `R$ ${vendas.filter((venda) => venda.mikrotik_id === mikrotik.id).reduce((sum, venda) => sum + (venda.preco || 0), 0).toFixed(2)}`,
       })).sort((a, b) => b.sales - a.sales).slice(0, 3));
 
+      // Top usuários por saldo (excluindo admins)
+      setTopUsers(users?.filter(u => u.role !== 'admin')
+        .sort((a, b) => (b.saldo || 0) - (a.saldo || 0))
+        .slice(0, 5)
+        .map((user, index) => ({
+          name: user.nome,
+          email: user.email,
+          saldo: user.saldo || 0,
+          position: index + 1
+        })) || []);
+
       setLoading(false);
     }
 
@@ -135,7 +147,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Charts and Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Sales */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="p-4 border-b border-gray-100">
@@ -193,6 +205,46 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Top Users by Balance */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-4 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <Users className="w-5 h-5 mr-2 text-purple-600" />
+              Top Usuários por Saldo
+            </h3>
+          </div>
+          <div className="p-4">
+            <div className="space-y-3">
+              {topUsers.map((user) => (
+                <div key={user.email} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${
+                      user.position === 1 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                      user.position === 2 ? 'bg-gradient-to-r from-gray-300 to-gray-500' :
+                      user.position === 3 ? 'bg-gradient-to-r from-orange-400 to-orange-600' :
+                      'bg-gradient-to-r from-blue-400 to-blue-600'
+                    }`}>
+                      <span className="text-white text-xs font-bold">{user.position}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                      <p className="text-xs text-gray-500">{user.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-green-600">R$ {user.saldo.toFixed(2)}</p>
+                  </div>
+                </div>
+              ))}
+              {topUsers.length === 0 && (
+                <div className="text-center py-4 text-gray-500">
+                  <p className="text-sm">Nenhum usuário encontrado</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

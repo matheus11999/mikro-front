@@ -213,17 +213,26 @@ export default function TestePix() {
 
   // Corrigir o polling automático para usar o endpoint correto e intervalo de 1 segundo
   useEffect(() => {
-    if (response && response.status === 'pendente' && mac && selectedMikrotik && selectedPlano) {
+    if (response && (response.status === 'pendente' || (response.pagamento_pendente && response.pagamento_pendente.status !== 'approved')) && mac && selectedMikrotik) {
       const interval = setInterval(() => {
-        fetch(`${apiUrl}/verify`, {
+        // Usa o endpoint /status em vez de /verify
+        fetch(`${apiUrl}/status`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mac, mikrotik_id: selectedMikrotik, plano_id: selectedPlano })
+          body: JSON.stringify({ mac, mikrotik_id: selectedMikrotik })
         })
           .then(res => res.json())
           .then(data => {
             setResponse(data);
-            addLog('info', 'Polling automático: resposta do /verify', data);
+            addLog('info', 'Polling automático: resposta do /status', data);
+            
+            // Se o status mudou para autenticado, para o polling
+            if (data.status === 'autenticado') {
+              addLog('success', 'Pagamento aprovado! Senha liberada.', {
+                username: data.username,
+                password: data.password
+              });
+            }
           })
           .catch(err => {
             addLog('error', 'Erro no polling automático', err);
@@ -231,10 +240,10 @@ export default function TestePix() {
       }, 1000); // 1 segundo
       return () => clearInterval(interval);
     }
-  }, [response, mac, selectedMikrotik, selectedPlano, apiUrl]);
+  }, [response, mac, selectedMikrotik, apiUrl]);
 
   // Exibir mensagem de polling
-  const isPolling = response && response.status === 'pendente';
+  const isPolling = response && (response.status === 'pendente' || (response.pagamento_pendente && response.pagamento_pendente.status !== 'approved'));
 
   // Helper function to safely render values
   const safeRender = (value: any): string => {
@@ -452,65 +461,93 @@ export default function TestePix() {
           </CardContent>
         </Card>
       </div>
-      {response && (response.chave_pix || response.status === 'pendente' || response.status === 'aprovado') && (
+      {/* Card de Senha Aprovada - Exibido com destaque quando autenticado */}
+      {response && response.status === 'autenticado' && (
+        <Card className="mt-4 border-green-500 bg-green-50">
+          <CardHeader className="bg-green-100">
+            <CardTitle className="text-green-800">✅ Pagamento Aprovado - Senha Liberada!</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="p-4 bg-white rounded-lg border border-green-300">
+                  <Label className="text-green-700">Usuário WiFi:</Label>
+                  <div className="mt-1">
+                    <Input 
+                      value={safeRender(response.username)} 
+                      readOnly 
+                      onFocus={e => e.target.select()} 
+                      className="font-mono text-lg font-bold"
+                    />
+                  </div>
+                </div>
+                <div className="p-4 bg-white rounded-lg border border-green-300">
+                  <Label className="text-green-700">Senha WiFi:</Label>
+                  <div className="mt-1">
+                    <Input 
+                      value={safeRender(response.password)} 
+                      readOnly 
+                      onFocus={e => e.target.select()} 
+                      className="font-mono text-lg font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="p-4 bg-white rounded-lg">
+                  <div className="space-y-1">
+                    <div><b>Plano:</b> {safeRender(response.plano)}</div>
+                    <div><b>Duração:</b> {safeRender(response.duracao)} minutos</div>
+                    <div><b>Válido até:</b> {response.fim ? new Date(response.fim).toLocaleString() : ''}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Card de Pagamento Pix - Exibido quando pendente ou gerando */}
+      {response && (response.chave_pix || response.status === 'pendente' || (response.pagamento_pendente && response.pagamento_pendente.status !== 'approved')) && (
         <Card className="mt-4">
           <CardHeader>
             <CardTitle>Pagamento Pix</CardTitle>
           </CardHeader>
           <CardContent>
             <div style={{ marginBottom: 8 }}>
-              <Label>Status:</Label> <b>{safeRender(response.status)}</b>
+              <Label>Status:</Label> <b className={response.pagamento_pendente?.status === 'approved' ? 'text-green-600' : ''}>{safeRender(response.pagamento_pendente?.status || response.status)}</b>
             </div>
-            {response.valor && (
+            {(response.valor || response.pagamento_pendente?.valor) && (
               <div style={{ marginBottom: 8 }}>
-                <Label>Valor:</Label> <b>R$ {safeRender(response.valor)}</b>
+                <Label>Valor:</Label> <b>R$ {safeRender(response.valor || response.pagamento_pendente?.valor)}</b>
               </div>
             )}
-            {response.plano_id && (
-              <div style={{ marginBottom: 8 }}>
-                <Label>Plano:</Label> <b>{safeRender(response.plano_id)}</b>
-              </div>
-            )}
-            {response.mikrotik_id && (
-              <div style={{ marginBottom: 8 }}>
-                <Label>Mikrotik ID:</Label> <b>{safeRender(response.mikrotik_id)}</b>
-              </div>
-            )}
-            {response.chave_pix && (
+            {(response.chave_pix || response.pagamento_pendente?.chave_pix) && (
               <div style={{ marginBottom: 8 }}>
                 <Label>Chave Pix (copia e cola):</Label>
-                <Input value={safeRender(response.chave_pix)} readOnly onFocus={e => e.target.select()} style={{ width: '100%' }} />
+                <Input value={safeRender(response.chave_pix || response.pagamento_pendente?.chave_pix)} readOnly onFocus={e => e.target.select()} style={{ width: '100%' }} />
               </div>
             )}
-            {response.qrcode && (
+            {(response.qrcode || response.pagamento_pendente?.qrcode) && (
               <div style={{ marginBottom: 8 }}>
                 <Label>QR Code:</Label><br />
-                <img src={`data:image/png;base64,${response.qrcode}`} alt="QR Code Pix" style={{ maxWidth: 256, border: '1px solid #ccc', background: '#fff' }} />
+                <img src={`data:image/png;base64,${response.qrcode || response.pagamento_pendente?.qrcode}`} alt="QR Code Pix" style={{ maxWidth: 256, border: '1px solid #ccc', background: '#fff' }} />
               </div>
             )}
-            {response.pagamento_gerado_em && (
+            {(response.pagamento_gerado_em || response.pagamento_pendente?.pagamento_gerado_em) && (
               <div style={{ marginBottom: 8 }}>
-                <Label>Pagamento gerado em:</Label> <b>{new Date(response.pagamento_gerado_em).toLocaleString()}</b>
-              </div>
-            )}
-            {response.pagamento_aprovado_em && (
-              <div style={{ marginBottom: 8 }}>
-                <Label>Pagamento aprovado em:</Label> <b>{new Date(response.pagamento_aprovado_em).toLocaleString()}</b>
-              </div>
-            )}
-            {response.ticket_url && (
-              <a href={response.ticket_url} target="_blank" rel="noopener noreferrer">Ver comprovante Mercado Pago</a>
-            )}
-            {response.senha && (
-              <div style={{ marginTop: 16, padding: 12, background: '#e6ffe6', borderRadius: 8 }}>
-                <Label>Senha entregue:</Label><br />
-                <b>Usuário: {safeRender(response.senha.usuario)}</b><br />
-                <b>Senha: {safeRender(response.senha.senha)}</b>
+                <Label>Pagamento gerado em:</Label> <b>{new Date(response.pagamento_gerado_em || response.pagamento_pendente?.pagamento_gerado_em).toLocaleString()}</b>
               </div>
             )}
             {isPolling && (
-              <div style={{ color: '#555', margin: '12px 0', fontWeight: 'bold' }}>
-                Próxima Consulta do Pagamento em 5 segundos. Status Pagamento: <span style={{ color: '#e67e22' }}>Pendente</span>
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg animate-pulse">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-blue-700 font-medium">Verificando pagamento... (a cada 1 segundo)</span>
+                </div>
+                <div className="mt-1 text-sm text-blue-600">
+                  Status atual: <b>{safeRender(response.pagamento_pendente?.status || 'aguardando')}</b>
+                </div>
               </div>
             )}
           </CardContent>
