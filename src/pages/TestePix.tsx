@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,11 +38,57 @@ export default function TestePix() {
   const [error, setError] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [apiStatus, setApiStatus] = useState<'idle' | 'ok' | 'fail' | 'loading'>('idle');
+  const [apiStatusMsg, setApiStatusMsg] = useState('');
+  const [backendVars, setBackendVars] = useState<any>(null);
+  const [backendVarsError, setBackendVarsError] = useState<string | null>(null);
 
   const addLog = (type: LogEntry['type'], message: string, data?: any) => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prevLogs => [{ type, message, data, timestamp }, ...prevLogs]);
   };
+
+  const checkApiStatus = useCallback(async () => {
+    setApiStatus('loading');
+    setApiStatusMsg('Testando conexão com a API...');
+    try {
+      const url = apiUrl.replace(/\/$/, '');
+      const res = await fetch(url, { method: 'GET' });
+      if (res.ok) {
+        const data = await res.json();
+        setApiStatus('ok');
+        setApiStatusMsg(data.message || 'API acessível!');
+      } else {
+        setApiStatus('fail');
+        setApiStatusMsg('API respondeu, mas não está OK.');
+      }
+    } catch (err) {
+      setApiStatus('fail');
+      setApiStatusMsg('Não foi possível conectar à API.');
+    }
+  }, [apiUrl]);
+
+  const fetchBackendVars = useCallback(async () => {
+    setBackendVarsError(null);
+    setBackendVars(null);
+    try {
+      const url = apiUrl.replace(/\/api\/captive-check.*/, '/api/captive-check/env');
+      const res = await fetch(url, { method: 'GET' });
+      if (res.ok) {
+        const data = await res.json();
+        setBackendVars(data);
+      } else {
+        setBackendVarsError('Não foi possível obter variáveis do backend.');
+      }
+    } catch (err) {
+      setBackendVarsError('Erro ao buscar variáveis do backend.');
+    }
+  }, [apiUrl]);
+
+  useEffect(() => {
+    // Testa automaticamente ao abrir a página
+    checkApiStatus();
+  }, [checkApiStatus]);
 
   useEffect(() => {
     async function fetchData() {
@@ -162,11 +208,54 @@ export default function TestePix() {
   return (
     <div className="container mx-auto p-4 space-y-8">
       <div className="mb-4 p-2 bg-gray-50 border rounded">
+        <div className="flex items-center gap-4 mb-2">
+          <Button onClick={checkApiStatus} variant="outline" size="sm">Testar conexão com API</Button>
+          <span className={
+            apiStatus === 'ok' ? 'text-green-600 font-bold' :
+            apiStatus === 'fail' ? 'text-red-600 font-bold' :
+            apiStatus === 'loading' ? 'text-yellow-600 font-bold' : ''
+          }>
+            {apiStatus === 'ok' && 'API Online'}
+            {apiStatus === 'fail' && 'API Offline'}
+            {apiStatus === 'loading' && 'Testando...'}
+            {apiStatus === 'idle' && 'Status desconhecido'}
+          </span>
+          <span className="text-xs text-gray-500">{apiStatusMsg}</span>
+        </div>
         <div><strong>API URL:</strong> {apiUrl}</div>
         <div><strong>Frontend URL:</strong> {window.location.origin}</div>
         <div><strong>VITE_API_URL:</strong> {import.meta.env.VITE_API_URL}</div>
         <div><strong>VITE_SUPABASE_URL:</strong> {import.meta.env.VITE_SUPABASE_URL}</div>
         <div><strong>VITE_SUPABASE_KEY:</strong> {import.meta.env.VITE_SUPABASE_KEY ? '***' : '(não definida)'}</div>
+        <div className="mb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-bold">Variáveis do Frontend (VITE_*)</span>
+          </div>
+          <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap">
+{JSON.stringify({
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+  VITE_SUPABASE_KEY: import.meta.env.VITE_SUPABASE_KEY,
+  NODE_ENV: import.meta.env.NODE_ENV,
+  MODE: import.meta.env.MODE,
+  BASE_URL: import.meta.env.BASE_URL,
+  PROD: import.meta.env.PROD,
+  DEV: import.meta.env.DEV,
+}, null, 2)}
+          </pre>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="font-bold">Variáveis do Backend</span>
+            <Button onClick={fetchBackendVars} size="sm" variant="outline">Buscar variáveis do backend</Button>
+          </div>
+          {backendVars && (
+            <pre className="bg-gray-100 p-2 rounded text-xs whitespace-pre-wrap">
+{JSON.stringify(backendVars, null, 2)}
+            </pre>
+          )}
+          {backendVarsError && (
+            <div className="text-red-600 text-xs">{backendVarsError}</div>
+          )}
+        </div>
       </div>
       <Card>
         <CardHeader>
