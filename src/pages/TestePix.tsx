@@ -211,6 +211,15 @@ export default function TestePix() {
     URL.revokeObjectURL(url);
   }
 
+  useEffect(() => {
+    if (response && response.status === 'pendente') {
+      const interval = setInterval(() => {
+        handleApiCall('status');
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [response]);
+
   return (
     <div className="container mx-auto p-4 space-y-8">
       <div className="mb-4 p-2 bg-gray-50 border rounded">
@@ -405,6 +414,16 @@ export default function TestePix() {
             {response.valor && (
               <div style={{ marginBottom: 8 }}>
                 <Label>Valor:</Label> <b>R$ {response.valor}</b>
+              </div>
+            )}
+            {response.plano_id && (
+              <div style={{ marginBottom: 8 }}>
+                <Label>Plano:</Label> <b>{response.plano_id}</b>
+              </div>
+            )}
+            {response.mikrotik_id && (
+              <div style={{ marginBottom: 8 }}>
+                <Label>Mikrotik ID:</Label> <b>{response.mikrotik_id}</b>
               </div>
             )}
             {response.chave_pix && (
