@@ -137,27 +137,29 @@ export default function TestePix() {
     }
   };
 
-  // Carregar dados iniciais
+  // Carregar Mikrotiks iniciais
   useEffect(() => {
-    const loadInitialData = async () => {
+    const loadMikrotiks = async () => {
       try {
-        addLog('info', 'Buscando dados iniciais (Mikrotiks e Planos)...');
+        addLog('info', 'Buscando Mikrotiks...');
         
-        const [mikrotiksData, planosData] = await Promise.all([
-          supabase.from('mikrotiks').select('id, nome').eq('ativo', true),
-          supabase.from('planos').select('id, nome, preco, duracao').eq('ativo', true).order('preco')
-        ]);
+        const { data: mikrotiksData, error } = await supabase
+          .from('mikrotiks')
+          .select('id, nome')
+          .eq('ativo', true)
+          .order('nome');
 
-        if (mikrotiksData.data) {
-          setMikrotiks(mikrotiksData.data);
-        }
-        if (planosData.data) {
-          setPlanos(planosData.data);
+        if (error) {
+          addLog('error', 'Erro ao carregar Mikrotiks', error);
+          return;
         }
 
-        addLog('success', 'Mikrotiks e Planos carregados com sucesso.');
+        if (mikrotiksData) {
+          setMikrotiks(mikrotiksData);
+          addLog('success', `${mikrotiksData.length} Mikrotiks carregados com sucesso.`);
+        }
       } catch (error) {
-        addLog('error', 'Erro ao carregar dados iniciais', error);
+        addLog('error', 'Erro ao carregar Mikrotiks', error);
       }
     };
 
@@ -165,8 +167,44 @@ export default function TestePix() {
     const envApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/captive-check/';
     setApiUrl(envApiUrl);
 
-    loadInitialData();
+    loadMikrotiks();
   }, [addLog]);
+
+  // Carregar planos quando um Mikrotik é selecionado
+  useEffect(() => {
+    const loadPlanos = async () => {
+      if (!selectedMikrotik) {
+        setPlanos([]);
+        setSelectedPlano('');
+        return;
+      }
+
+      try {
+        addLog('info', `Buscando planos do Mikrotik selecionado...`);
+        
+        const { data: planosData, error } = await supabase
+          .from('planos')
+          .select('id, nome, preco, duracao')
+          .eq('mikrotik_id', selectedMikrotik)
+          .eq('ativo', true)
+          .order('preco');
+
+        if (error) {
+          addLog('error', 'Erro ao carregar planos', error);
+          return;
+        }
+
+        if (planosData) {
+          setPlanos(planosData);
+          addLog('success', `${planosData.length} planos carregados para o Mikrotik selecionado.`);
+        }
+      } catch (error) {
+        addLog('error', 'Erro ao carregar planos', error);
+      }
+    };
+
+    loadPlanos();
+  }, [selectedMikrotik, addLog]);
 
   // Função para parar polling
   const stopPolling = useCallback(() => {
@@ -409,6 +447,14 @@ export default function TestePix() {
               </CardTitle>
               <CardDescription>
                 Configure os parâmetros para testar o pagamento PIX
+                {mikrotiks.length > 0 && (
+                  <span className="block mt-1 text-xs">
+                    {mikrotiks.length} Mikrotik{mikrotiks.length !== 1 ? 's' : ''} disponível{mikrotiks.length !== 1 ? 'eis' : ''}
+                    {selectedMikrotik && planos.length > 0 && (
+                      <span> • {planos.length} plano{planos.length !== 1 ? 's' : ''} no Mikrotik selecionado</span>
+                    )}
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -444,16 +490,31 @@ export default function TestePix() {
 
               <div className="space-y-2">
                 <Label htmlFor="mikrotik">Mikrotik</Label>
-                <Select value={selectedMikrotik} onValueChange={setSelectedMikrotik}>
+                <Select 
+                  value={selectedMikrotik} 
+                  onValueChange={(value) => {
+                    setSelectedMikrotik(value);
+                    const mikrotik = mikrotiks.find(mk => mk.id === value);
+                    if (mikrotik) {
+                      addLog('info', `Mikrotik selecionado: ${mikrotik.nome}`);
+                    }
+                  }}
+                >
                   <SelectTrigger id="mikrotik">
                     <SelectValue placeholder="Selecione um Mikrotik" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mikrotiks.map((mk) => (
-                      <SelectItem key={mk.id} value={mk.id}>
-                        {mk.nome}
+                    {mikrotiks.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        Nenhum Mikrotik encontrado
                       </SelectItem>
-                    ))}
+                    ) : (
+                      mikrotiks.map((mk) => (
+                        <SelectItem key={mk.id} value={mk.id}>
+                          {mk.nome}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -469,16 +530,35 @@ export default function TestePix() {
                       addLog('info', `Plano selecionado: ${plano.nome} (R$ ${plano.preco})`);
                     }
                   }}
+                  disabled={!selectedMikrotik}
                 >
                   <SelectTrigger id="plano">
-                    <SelectValue placeholder="Selecione um plano" />
+                    <SelectValue 
+                      placeholder={
+                        !selectedMikrotik 
+                          ? "Selecione um Mikrotik primeiro" 
+                          : planos.length === 0 
+                            ? "Nenhum plano disponível" 
+                            : "Selecione um plano"
+                      } 
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {planos.map((plano) => (
-                      <SelectItem key={plano.id} value={plano.id}>
-                        {plano.nome} - R$ {plano.preco.toFixed(2)} ({plano.duracao} min)
+                    {!selectedMikrotik ? (
+                      <SelectItem value="" disabled>
+                        Selecione um Mikrotik primeiro
                       </SelectItem>
-                    ))}
+                    ) : planos.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        Nenhum plano disponível para este Mikrotik
+                      </SelectItem>
+                    ) : (
+                      planos.map((plano) => (
+                        <SelectItem key={plano.id} value={plano.id}>
+                          {plano.nome} - R$ {plano.preco.toFixed(2)} ({plano.duracao} min)
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
