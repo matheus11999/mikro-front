@@ -782,7 +782,7 @@ export default function TestePix() {
                   {response.ultimo_plano && (
                     <div>
                       <p className="text-sm text-muted-foreground">Último plano</p>
-                      <p className="font-medium">{response.ultimo_plano}</p>
+                      <p className="font-medium">{safeRender(response.ultimo_plano)}</p>
                     </div>
                   )}
                 </div>
