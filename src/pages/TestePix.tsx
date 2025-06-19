@@ -236,12 +236,12 @@ export default function TestePix() {
   // Exibir mensagem de polling
   const isPolling = response && response.status === 'pendente';
 
-  // Exibir erro se não houver senha disponível
-  {error && error.code === 'NO_PASSWORD_AVAILABLE' && (
-    <div style={{ color: 'red', margin: 8 }}>
-      Não há senhas disponíveis para este Mikrotik/Plano. Contate o administrador.
-    </div>
-  )}
+  // Helper function to safely render values
+  const safeRender = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
 
   return (
     <div className="container mx-auto p-4 space-y-8">
@@ -262,8 +262,8 @@ export default function TestePix() {
         </div>
         <div><strong>API URL:</strong> {apiUrl}</div>
         <div><strong>Frontend URL:</strong> {window.location.origin}</div>
-        <div><strong>VITE_API_URL:</strong> {import.meta.env.VITE_API_URL}</div>
-        <div><strong>VITE_SUPABASE_URL:</strong> {import.meta.env.VITE_SUPABASE_URL}</div>
+        <div><strong>VITE_API_URL:</strong> {import.meta.env.VITE_API_URL || '(não definida)'}</div>
+        <div><strong>VITE_SUPABASE_URL:</strong> {import.meta.env.VITE_SUPABASE_URL || '(não definida)'}</div>
         <div><strong>VITE_SUPABASE_KEY:</strong> {import.meta.env.VITE_SUPABASE_KEY ? '***' : '(não definida)'}</div>
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-1">
@@ -295,6 +295,14 @@ export default function TestePix() {
           )}
         </div>
       </div>
+      
+      {/* Exibir erro se não houver senha disponível */}
+      {error && error.code === 'NO_PASSWORD_AVAILABLE' && (
+        <div className="text-red-600 p-2 bg-red-50 border border-red-200 rounded">
+          Não há senhas disponíveis para este Mikrotik/Plano. Contate o administrador.
+        </div>
+      )}
+      
       <Card>
         <CardHeader>
           <CardTitle>Teste Pix Mercado Pago</CardTitle>
@@ -366,7 +374,7 @@ export default function TestePix() {
             {loading && <p>Carregando...</p>}
             {error && (
               <div>
-                <h3 className="text-red-600 font-bold">Erro: {error.message || error.error || 'Ocorreu um erro'}</h3>
+                <h3 className="text-red-600 font-bold">Erro: {safeRender(error.message || error.error) || 'Ocorreu um erro'}</h3>
                 <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded mt-2 text-sm whitespace-pre-wrap">
                   {JSON.stringify(error, null, 2)}
                 </pre>
@@ -375,46 +383,46 @@ export default function TestePix() {
             {response && (
               <>
                 <div className="mb-2">
-                  <b>Status:</b> {response.status}
+                  <b>Status:</b> {safeRender(response.status)}
                 </div>
                 <div className="mb-2">
-                  <b>MAC:</b> {response.mac}
+                  <b>MAC:</b> {safeRender(response.mac)}
                 </div>
                 <div className="mb-2">
-                  <b>Mikrotik ID:</b> {response.mikrotik_id}
+                  <b>Mikrotik ID:</b> {safeRender(response.mikrotik_id)}
                 </div>
                 <div className="mb-2">
-                  <b>Total de vendas aprovadas:</b> {response.total_vendas}
+                  <b>Total de vendas aprovadas:</b> {safeRender(response.total_vendas)}
                 </div>
                 <div className="mb-2">
-                  <b>Total gasto:</b> R$ {response.total_gasto}
+                  <b>Total gasto:</b> R$ {safeRender(response.total_gasto)}
                 </div>
                 <div className="mb-2">
-                  <b>Último valor pago:</b> {response.ultimo_valor}
+                  <b>Último valor pago:</b> {safeRender(response.ultimo_valor)}
                 </div>
                 <div className="mb-2">
-                  <b>Último plano:</b> {response.ultimo_plano}
+                  <b>Último plano:</b> {safeRender(response.ultimo_plano)}
                 </div>
                 {response.status === 'pendente' && response.pagamento_pendente && (
                   <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded">
                     <b>Pagamento Pendente:</b>
-                    <div><b>Status:</b> {response.pagamento_pendente.status}</div>
-                    <div><b>Valor:</b> R$ {response.pagamento_pendente.valor}</div>
-                    <div><b>Chave Pix:</b> {response.pagamento_pendente.chave_pix}</div>
+                    <div><b>Status:</b> {safeRender(response.pagamento_pendente.status)}</div>
+                    <div><b>Valor:</b> R$ {safeRender(response.pagamento_pendente.valor)}</div>
+                    <div><b>Chave Pix:</b> {safeRender(response.pagamento_pendente.chave_pix)}</div>
                     <div><b>QR Code:</b> {response.pagamento_pendente.qrcode && <img src={`data:image/png;base64,${response.pagamento_pendente.qrcode}`} alt="QR Code Pix" style={{ maxWidth: 256, border: '1px solid #ccc', background: '#fff' }} />}</div>
-                    <div><b>Gerado em:</b> {response.pagamento_pendente.pagamento_gerado_em && new Date(response.pagamento_pendente.pagamento_gerado_em).toLocaleString()}</div>
-                    <div><b>Payment ID:</b> {response.pagamento_pendente.payment_id}</div>
-                    <div><b>Ticket URL:</b> {response.pagamento_pendente.ticket_url}</div>
+                    <div><b>Gerado em:</b> {response.pagamento_pendente.pagamento_gerado_em ? new Date(response.pagamento_pendente.pagamento_gerado_em).toLocaleString() : ''}</div>
+                    <div><b>Payment ID:</b> {safeRender(response.pagamento_pendente.payment_id)}</div>
+                    <div><b>Ticket URL:</b> {safeRender(response.pagamento_pendente.ticket_url)}</div>
                   </div>
                 )}
                 {response.status === 'autenticado' && (
                   <div className="mt-4 p-2 bg-green-50 border border-green-200 rounded">
                     <b>Senha Ativa:</b>
-                    <div><b>Usuário:</b> {response.username}</div>
-                    <div><b>Senha:</b> {response.password}</div>
-                    <div><b>Plano:</b> {response.plano}</div>
-                    <div><b>Duração:</b> {response.duracao} minutos</div>
-                    <div><b>Fim:</b> {response.fim && new Date(response.fim).toLocaleString()}</div>
+                    <div><b>Usuário:</b> {safeRender(response.username)}</div>
+                    <div><b>Senha:</b> {safeRender(response.password)}</div>
+                    <div><b>Plano:</b> {safeRender(response.plano)}</div>
+                    <div><b>Duração:</b> {safeRender(response.duracao)} minutos</div>
+                    <div><b>Fim:</b> {response.fim ? new Date(response.fim).toLocaleString() : ''}</div>
                   </div>
                 )}
                 <div className="mt-4">
@@ -451,27 +459,27 @@ export default function TestePix() {
           </CardHeader>
           <CardContent>
             <div style={{ marginBottom: 8 }}>
-              <Label>Status:</Label> <b>{response.status}</b>
+              <Label>Status:</Label> <b>{safeRender(response.status)}</b>
             </div>
             {response.valor && (
               <div style={{ marginBottom: 8 }}>
-                <Label>Valor:</Label> <b>R$ {response.valor}</b>
+                <Label>Valor:</Label> <b>R$ {safeRender(response.valor)}</b>
               </div>
             )}
             {response.plano_id && (
               <div style={{ marginBottom: 8 }}>
-                <Label>Plano:</Label> <b>{response.plano_id}</b>
+                <Label>Plano:</Label> <b>{safeRender(response.plano_id)}</b>
               </div>
             )}
             {response.mikrotik_id && (
               <div style={{ marginBottom: 8 }}>
-                <Label>Mikrotik ID:</Label> <b>{response.mikrotik_id}</b>
+                <Label>Mikrotik ID:</Label> <b>{safeRender(response.mikrotik_id)}</b>
               </div>
             )}
             {response.chave_pix && (
               <div style={{ marginBottom: 8 }}>
                 <Label>Chave Pix (copia e cola):</Label>
-                <Input value={response.chave_pix} readOnly onFocus={e => e.target.select()} style={{ width: '100%' }} />
+                <Input value={safeRender(response.chave_pix)} readOnly onFocus={e => e.target.select()} style={{ width: '100%' }} />
               </div>
             )}
             {response.qrcode && (
@@ -496,8 +504,8 @@ export default function TestePix() {
             {response.senha && (
               <div style={{ marginTop: 16, padding: 12, background: '#e6ffe6', borderRadius: 8 }}>
                 <Label>Senha entregue:</Label><br />
-                <b>Usuário: {response.senha.usuario}</b><br />
-                <b>Senha: {response.senha.senha}</b>
+                <b>Usuário: {safeRender(response.senha.usuario)}</b><br />
+                <b>Senha: {safeRender(response.senha.senha)}</b>
               </div>
             )}
             {isPolling && (
