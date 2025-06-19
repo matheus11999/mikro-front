@@ -211,14 +211,29 @@ export default function TestePix() {
     URL.revokeObjectURL(url);
   }
 
+  // Polling automático para status pendente
   useEffect(() => {
-    if (response && response.status === 'pendente') {
+    if (response && response.status === 'pendente' && mac && selectedMikrotik && selectedPlano) {
       const interval = setInterval(() => {
-        handleApiCall('status');
+        // Chama a rota /verify corretamente
+        fetch(`${apiUrl}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mac, mikrotik_id: selectedMikrotik, plano_id: selectedPlano })
+        })
+          .then(res => res.json())
+          .then(data => setResponse(data));
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [response]);
+  }, [response, mac, selectedMikrotik, selectedPlano, apiUrl]);
+
+  // Exibir erro se não houver senha disponível
+  {error && error.code === 'NO_PASSWORD_AVAILABLE' && (
+    <div style={{ color: 'red', margin: 8 }}>
+      Não há senhas disponíveis para este Mikrotik/Plano. Contate o administrador.
+    </div>
+  )}
 
   return (
     <div className="container mx-auto p-4 space-y-8">
