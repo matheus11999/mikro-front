@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Search, Edit, Trash2, UserCheck, Server, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 const UsersManagement = () => {
   const [showModal, setShowModal] = useState(false);
@@ -12,9 +13,7 @@ const UsersManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    username: '',
     password: '',
-    pixKey: '',
     whatsapp: ''
   });
 
@@ -32,6 +31,7 @@ const UsersManagement = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    console.log('Iniciando criação de usuário:', formData);
     const email = formData.email.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setError('E-mail inválido.');
@@ -40,44 +40,67 @@ const UsersManagement = () => {
     }
     if (editingUser) {
       // Atualizar usuário no Supabase
-      await supabase.from('clientes').update({ 
+      const { error: updateError } = await supabase.from('clientes').update({ 
         nome: formData.name, 
-        pixKey: formData.pixKey, 
         whatsapp: formData.whatsapp 
       }).eq('id', editingUser.id);
+      
+      if (updateError) {
+        setError(`Erro ao atualizar usuário: ${updateError.message}`);
+        setLoading(false);
+        return;
+      }
     } else {
       // Verifica se já existe usuário com o mesmo e-mail
       const { data: existing, error: existingError } = await supabase.from('clientes').select('id').eq('email', email);
+      if (existingError) {
+        setError(`Erro ao verificar email: ${existingError.message}`);
+        setLoading(false);
+        return;
+      }
       if (existing && existing.length > 0) {
         setError('Já existe um usuário com este e-mail.');
         setLoading(false);
         return;
       }
-      // Cria usuário no Supabase Auth
-      const { error: signUpError } = await supabase.auth.signUp({ email, password: formData.password });
+      // Cria usuário no Supabase Auth usando admin client
+      console.log('Criando usuário no Auth:', { email });
+      const { error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: formData.password,
+        email_confirm: true
+      });
       if (signUpError) {
+        console.error('Erro no signUp:', signUpError);
         setError(signUpError.message);
         setLoading(false);
         return;
       }
-      // Cria registro na tabela clientes
-      const username = formData.username || email.split('@')[0];
-      await supabase.from('clientes').insert([{ 
+      console.log('Usuário criado no Auth com sucesso');
+      // Cria registro na tabela clientes usando admin client
+      console.log('Inserindo na tabela clientes:', { nome: formData.name, email });
+      const { error: insertError } = await supabaseAdmin.from('clientes').insert([{ 
         nome: formData.name, 
         email, 
-        username,
         saldo: 0, 
         role: 'user', 
-        pixKey: formData.pixKey, 
         whatsapp: formData.whatsapp || null 
       }]);
+      
+      if (insertError) {
+        console.error('Erro ao inserir na tabela clientes:', insertError);
+        setError(`Erro ao criar usuário: ${insertError.message}`);
+        setLoading(false);
+        return;
+      }
+      console.log('Usuário inserido na tabela clientes com sucesso');
     }
     // Atualizar lista
     const { data } = await supabase.from('clientes').select('*');
     setUsers(data || []);
     setShowModal(false);
     setEditingUser(null);
-    setFormData({ name: '', email: '', username: '', password: '', pixKey: '', whatsapp: '' });
+    setFormData({ name: '', email: '', password: '', whatsapp: '' });
     setLoading(false);
   };
 
@@ -86,9 +109,7 @@ const UsersManagement = () => {
     setFormData({
       name: user.nome || user.name,
       email: user.email || '',
-      username: user.username || '',
       password: '',
-      pixKey: user.pixKey || '',
       whatsapp: user.whatsapp || ''
     });
     setShowModal(true);
@@ -125,7 +146,7 @@ const UsersManagement = () => {
         <button
                   onClick={() => {
           setEditingUser(null);
-          setFormData({ name: '', email: '', username: '', password: '', pixKey: '', whatsapp: '' });
+          setFormData({ name: '', email: '', password: '', whatsapp: '' });
           setShowModal(true);
         }}
           className="mt-4 sm:mt-0 btn-primary flex items-center"
@@ -170,9 +191,9 @@ const UsersManagement = () => {
             </div>
             <div className="ml-4">
               <p className="text-xl font-bold text-gray-900">
-                {users.reduce((sum, user) => sum + (user.mikrotiks || 0), 0)}
+                {filteredUsers.filter(u => u.whatsapp).length}
               </p>
-              <p className="text-sm text-gray-600">Mikrotiks Vinculados</p>
+              <p className="text-sm text-gray-600">Com WhatsApp</p>
             </div>
           </div>
         </div>
@@ -209,9 +230,8 @@ const UsersManagement = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chave PIX</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mikrotiks</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WhatsApp</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Criação</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
@@ -227,13 +247,8 @@ const UsersManagement = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-mono bg-blue-50 text-blue-800 px-2 py-1 rounded">
-                      {user.pixKey || 'Não informado'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                      {user.mikrotiks || 0}
+                    <span className="text-sm text-gray-900">
+                      {user.whatsapp || 'Não informado'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -252,7 +267,7 @@ const UsersManagement = () => {
                     </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'N/A'}
+                    {user.criado_em ? new Date(user.criado_em).toLocaleDateString('pt-BR') : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex space-x-2">
@@ -327,17 +342,6 @@ const UsersManagement = () => {
               </div>
               
               <div className="form-group">
-                <label className="form-label">Nome de Usuário</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-              
-              <div className="form-group">
                 <label className="form-label">Senha</label>
                 <input
                   type="password"
@@ -346,18 +350,6 @@ const UsersManagement = () => {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="input-field"
                   placeholder={editingUser ? 'Deixe em branco para manter a atual' : ''}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Chave PIX</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.pixKey}
-                  onChange={(e) => setFormData({ ...formData, pixKey: e.target.value })}
-                  className="input-field"
-                  placeholder="CPF, e-mail, telefone ou chave aleatória"
                 />
               </div>
               
