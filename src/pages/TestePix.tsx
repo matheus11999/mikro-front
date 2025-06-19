@@ -25,7 +25,7 @@ interface LogEntry {
 }
 
 export default function TestePix() {
-  const [apiUrl, setApiUrl] = useState('http://localhost:3000/api/captive-check');
+  const [apiUrl, setApiUrl] = useState(import.meta.env.VITE_API_URL || 'http://localhost:3000/api/captive-check');
   const [mac, setMac] = useState('');
   const [mikrotiks, setMikrotiks] = useState<Mikrotik[]>([]);
   const [planos, setPlanos] = useState<Plano[]>([]);
