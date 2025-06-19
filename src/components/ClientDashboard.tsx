@@ -12,16 +12,20 @@ const ClientDashboard = () => {
   useEffect(() => {
     async function fetchAll() {
       setLoading(true);
-      // Buscar o primeiro cliente
+      // Buscar o cliente logado
       const { data: clientes } = await supabase.from('clientes').select('*').limit(1);
       if (clientes && clientes.length > 0) {
         setClientData(clientes[0]);
         // Buscar mikrotiks do cliente
         const { data: mikrotiks } = await supabase.from('mikrotiks').select('*').eq('cliente_id', clientes[0].id);
         setUserMikrotiks(mikrotiks || []);
-        // Buscar vendas do cliente
-        const { data: vendas } = await supabase.from('vendas').select('*').eq('cliente_id', clientes[0].id);
-        setSalesHistory(vendas || []);
+        // Buscar vendas do cliente (por mikrotik_id)
+        let vendasCliente = [];
+        for (const mk of mikrotiks || []) {
+          const { data: vendas } = await supabase.from('vendas').select('*').eq('mikrotik_id', mk.id).eq('status', 'aprovado');
+          vendasCliente = vendasCliente.concat(vendas || []);
+        }
+        setSalesHistory(vendasCliente);
       }
       setLoading(false);
     }

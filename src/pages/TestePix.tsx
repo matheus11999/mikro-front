@@ -211,7 +211,7 @@ export default function TestePix() {
     URL.revokeObjectURL(url);
   }
 
-  // Polling automático para status pendente
+  // Corrigir o polling automático para usar o endpoint correto e intervalo de 1 segundo
   useEffect(() => {
     if (response && response.status === 'pendente' && mac && selectedMikrotik && selectedPlano) {
       const interval = setInterval(() => {
@@ -221,8 +221,14 @@ export default function TestePix() {
           body: JSON.stringify({ mac, mikrotik_id: selectedMikrotik, plano_id: selectedPlano })
         })
           .then(res => res.json())
-          .then(data => setResponse(data));
-      }, 5000);
+          .then(data => {
+            setResponse(data);
+            addLog('info', 'Polling automático: resposta do /verify', data);
+          })
+          .catch(err => {
+            addLog('error', 'Erro no polling automático', err);
+          });
+      }, 1000); // 1 segundo
       return () => clearInterval(interval);
     }
   }, [response, mac, selectedMikrotik, selectedPlano, apiUrl]);

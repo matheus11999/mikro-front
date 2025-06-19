@@ -7,6 +7,7 @@ const UsersManagement = () => {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -28,11 +29,26 @@ const UsersManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     if (editingUser) {
       // Atualizar usuário no Supabase
       await supabase.from('clientes').update({ nome: formData.name, pixKey: formData.pixKey }).eq('id', editingUser.id);
     } else {
-      // Criar usuário no Supabase
+      // Verifica se já existe usuário com o mesmo e-mail
+      const { data: existing, error: existingError } = await supabase.from('clientes').select('id').eq('email', formData.username);
+      if (existing && existing.length > 0) {
+        setError('Já existe um usuário com este e-mail.');
+        setLoading(false);
+        return;
+      }
+      // Cria usuário no Supabase Auth
+      const { error: signUpError } = await supabase.auth.signUp({ email: formData.username, password: formData.password });
+      if (signUpError) {
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
+      // Cria registro na tabela clientes
       await supabase.from('clientes').insert([{ nome: formData.name, email: formData.username, saldo: 0, role: 'user', pixKey: formData.pixKey }]);
     }
     // Atualizar lista

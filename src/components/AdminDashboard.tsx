@@ -59,7 +59,7 @@ const AdminDashboard = () => {
         },
         {
           title: 'Receita Total',
-          value: `R$ ${(vendas?.reduce((sum, v) => sum + (v.valor || 0), 0)).toFixed(2)}`,
+          value: `R$ ${(vendas?.reduce((sum, v) => sum + (v.preco || 0), 0)).toFixed(2)}`,
           change: '',
           icon: DollarSign,
           color: 'bg-emerald-500',
@@ -77,16 +77,18 @@ const AdminDashboard = () => {
 
       setRecentSales(vendas.map((venda) => ({
         id: venda.id,
-        mikrotik: venda.mikrotik,
-        plan: venda.plano,
-        value: venda.valor,
-        time: venda.data.toLocaleTimeString(),
+        mikrotik: venda.mikrotik_id,
+        plan: venda.plano_id,
+        value: venda.preco,
+        time: new Date(venda.data).toLocaleTimeString(),
+        saldo_admin: venda.preco ? (venda.preco * 0.1).toFixed(2) : '0.00',
+        saldo_cliente: venda.preco ? (venda.preco * 0.9).toFixed(2) : '0.00',
       })));
 
       setTopMikrotiks(mikrotiks.map((mikrotik) => ({
         name: mikrotik.nome,
         sales: vendas.filter((venda) => venda.mikrotik_id === mikrotik.id).length,
-        revenue: `R$ ${vendas.filter((venda) => venda.mikrotik_id === mikrotik.id).reduce((sum, venda) => sum + (venda.valor || 0), 0).toFixed(2)}`,
+        revenue: `R$ ${vendas.filter((venda) => venda.mikrotik_id === mikrotik.id).reduce((sum, venda) => sum + (venda.preco || 0), 0).toFixed(2)}`,
       })).sort((a, b) => b.sales - a.sales).slice(0, 3));
 
       setLoading(false);
