@@ -94,7 +94,7 @@ export default function TestePix() {
   const addLog = useCallback((type: LogEntry['type'], message: string, data?: any) => {
     setLogs(prev => [...prev, {
       type,
-      message,
+      message: typeof message === 'object' ? JSON.stringify(message) : String(message),
       data,
       timestamp: new Date().toLocaleTimeString()
     }]);
@@ -707,7 +707,7 @@ export default function TestePix() {
                       <div>{log.message}</div>
                       {log.data && (
                         <pre className="text-xs mt-1 opacity-80">
-                          {JSON.stringify(log.data, null, 2)}
+                          {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : String(log.data)}
                         </pre>
                       )}
                     </div>
