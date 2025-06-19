@@ -171,6 +171,21 @@ export default function TestePix() {
     loadMikrotiks();
   }, [addLog]);
 
+  // Cleanup polling quando o componente é desmontado
+  useEffect(() => {
+    return () => {
+      // Limpar intervalos manualmente ao desmontar
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current);
+        pollingTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Carregar planos quando um Mikrotik é selecionado
   useEffect(() => {
     const loadPlanos = async () => {
@@ -223,13 +238,25 @@ export default function TestePix() {
 
   // Função para iniciar polling
   const startPolling = useCallback(() => {
-    if (!mac || !selectedMikrotik || !response?.pagamento_pendente) return;
+    // Permitir iniciar polling mesmo se response ainda não foi definido (será definido em breve)
+    if (!mac || !selectedMikrotik) {
+      addLog('error', 'Não foi possível iniciar polling: MAC ou Mikrotik não definidos');
+      return;
+    }
+
+    // Se já está fazendo polling, não inicia outro
+    if (pollingActive) {
+      addLog('info', 'Polling já está ativo');
+      return;
+    }
 
     setPollingActive(true);
     setPollingTime(0);
     setPollingProgress(0);
     
     const maxTime = 600; // 10 minutos em segundos
+    
+    addLog('info', '🔄 Iniciando verificação automática de pagamento...');
     
     // Timer para contar o tempo
     pollingTimerRef.current = setInterval(() => {
@@ -250,26 +277,34 @@ export default function TestePix() {
     // Polling a cada 5 segundos
     pollingIntervalRef.current = setInterval(async () => {
       try {
+        // Buscar o response atual para ter o payment_id mais recente
+        const currentResponse = response;
+        
         // Se temos um payment_id, use o endpoint específico de poll-payment
-        if (response?.pagamento_pendente?.payment_id) {
+        if (currentResponse?.pagamento_pendente?.payment_id) {
+          addLog('info', `🔄 Verificando status do pagamento: ${currentResponse.pagamento_pendente.payment_id}`);
+          
           const pollResponse = await fetch(`${apiUrl}poll-payment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payment_id: response.pagamento_pendente.payment_id })
+            body: JSON.stringify({ payment_id: currentResponse.pagamento_pendente.payment_id })
           });
 
           if (!pollResponse.ok) {
-            throw new Error(`HTTP ${pollResponse.status}: ${pollResponse.statusText}`);
+            const errorText = await pollResponse.text();
+            throw new Error(`HTTP ${pollResponse.status}: ${errorText}`);
           }
 
           const pollData = await pollResponse.json();
-          addLog('info', 'Verificação específica de pagamento', pollData);
+          addLog('info', 'Resposta da verificação de pagamento:', pollData);
 
           // Se o pagamento foi aprovado
-          if (pollData.status === 'approved') {
+          if (pollData.status === 'approved' && pollData.username && pollData.password) {
             stopPolling();
-            addLog('success', '🎉 Pagamento aprovado! Senha liberada!');
-            toast.success('Pagamento aprovado com sucesso!');
+            addLog('success', '🎉 PAGAMENTO APROVADO! Credenciais liberadas automaticamente!');
+            toast.success('🎉 Pagamento aprovado! Senha liberada automaticamente!', {
+              duration: 10000,
+            });
             
             // Atualizar o response com os dados da senha
             setResponse(prev => ({
@@ -278,9 +313,12 @@ export default function TestePix() {
               username: pollData.username,
               password: pollData.password,
               plano: pollData.plano,
-              duracao: pollData.duracao
+              duracao: pollData.duracao,
+              fim: pollData.fim
             }));
             return;
+          } else if (pollData.status === 'pending') {
+            addLog('info', '⏳ Pagamento ainda pendente, continuando verificação...');
           }
         }
 
@@ -328,7 +366,7 @@ export default function TestePix() {
         // Não parar o polling por um erro temporário, apenas logar
       }
     }, 5000);
-  }, [mac, selectedMikrotik, response, apiUrl, stopPolling, addLog]);
+  }, [mac, selectedMikrotik, response, apiUrl, stopPolling, addLog, pollingActive]);
 
   // Verificar status
   const handleVerifyStatus = async () => {
@@ -469,10 +507,16 @@ export default function TestePix() {
       };
 
       setResponse(normalizedResponse);
-
-      // Inicia polling automático
-      startPolling();
-      toast.success('PIX gerado com sucesso!');
+      
+      addLog('success', `PIX gerado! Iniciando verificação automática de pagamento a cada 5 segundos...`);
+      addLog('info', `Payment ID: ${pixData.id}`);
+      
+      // Inicia polling automático imediatamente após definir o response
+      setTimeout(() => {
+        startPolling();
+      }, 100);
+      
+      toast.success('PIX gerado com sucesso! Verificação automática iniciada.');
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setError(errorMessage);
