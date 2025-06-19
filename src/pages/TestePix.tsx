@@ -250,6 +250,41 @@ export default function TestePix() {
     // Polling a cada 5 segundos
     pollingIntervalRef.current = setInterval(async () => {
       try {
+        // Se temos um payment_id, use o endpoint específico de poll-payment
+        if (response?.pagamento_pendente?.payment_id) {
+          const pollResponse = await fetch(`${apiUrl}poll-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment_id: response.pagamento_pendente.payment_id })
+          });
+
+          if (!pollResponse.ok) {
+            throw new Error(`HTTP ${pollResponse.status}: ${pollResponse.statusText}`);
+          }
+
+          const pollData = await pollResponse.json();
+          addLog('info', 'Verificação específica de pagamento', pollData);
+
+          // Se o pagamento foi aprovado
+          if (pollData.status === 'approved') {
+            stopPolling();
+            addLog('success', '🎉 Pagamento aprovado! Senha liberada!');
+            toast.success('Pagamento aprovado com sucesso!');
+            
+            // Atualizar o response com os dados da senha
+            setResponse(prev => ({
+              ...prev!,
+              status: 'autenticado',
+              username: pollData.username,
+              password: pollData.password,
+              plano: pollData.plano,
+              duracao: pollData.duracao
+            }));
+            return;
+          }
+        }
+
+        // Fallback: verificação de status geral
         const statusResponse = await fetch(`${apiUrl}status`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -279,11 +314,10 @@ export default function TestePix() {
         };
 
         setResponse(normalizedData);
-        addLog('info', 'Verificação automática de pagamento', normalizedData);
+        addLog('info', 'Verificação automática de status', normalizedData);
 
         // Se o pagamento foi aprovado ou o status mudou
-        if (normalizedData.status === 'autenticado' || 
-            (normalizedData.pagamento_pendente && normalizedData.pagamento_pendente.status === 'approved' && normalizedData.username)) {
+        if (normalizedData.status === 'autenticado' && normalizedData.username) {
           stopPolling();
           addLog('success', '🎉 Pagamento aprovado! Senha liberada!');
           toast.success('Pagamento aprovado com sucesso!');

@@ -111,16 +111,32 @@ const PasswordsManagement = () => {
     setShowEditModal(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta senha?')) {
-      setPasswords(passwords.filter(p => p.id !== id));
+      setLoading(true);
+      const { error } = await supabase.from('senhas').delete().eq('id', id);
+      if (error) {
+        console.error('Erro ao excluir senha:', error);
+        alert('Erro ao excluir senha. Tente novamente.');
+      } else {
+        setPasswords(passwords.filter(p => p.id !== id));
+      }
+      setLoading(false);
     }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (window.confirm(`Tem certeza que deseja excluir ${selectedPasswords.length} senhas?`)) {
-      setPasswords(passwords.filter(p => !selectedPasswords.includes(p.id)));
-      setSelectedPasswords([]);
+      setLoading(true);
+      const { error } = await supabase.from('senhas').delete().in('id', selectedPasswords);
+      if (error) {
+        console.error('Erro ao excluir senhas:', error);
+        alert('Erro ao excluir senhas. Tente novamente.');
+      } else {
+        setPasswords(passwords.filter(p => !selectedPasswords.includes(p.id)));
+        setSelectedPasswords([]);
+      }
+      setLoading(false);
     }
   };
 
