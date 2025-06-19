@@ -13,7 +13,8 @@ const UsersManagement = () => {
     name: '',
     username: '',
     password: '',
-    pixKey: ''
+    pixKey: '',
+    whatsapp: ''
   });
 
   useEffect(() => {
@@ -30,33 +31,39 @@ const UsersManagement = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    const email = formData.username.trim();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setError('E-mail inválido.');
+      setLoading(false);
+      return;
+    }
     if (editingUser) {
       // Atualizar usuário no Supabase
-      await supabase.from('clientes').update({ nome: formData.name, pixKey: formData.pixKey }).eq('id', editingUser.id);
+      await supabase.from('clientes').update({ nome: formData.name, pixKey: formData.pixKey, whatsapp: formData.whatsapp }).eq('id', editingUser.id);
     } else {
       // Verifica se já existe usuário com o mesmo e-mail
-      const { data: existing, error: existingError } = await supabase.from('clientes').select('id').eq('email', formData.username);
+      const { data: existing, error: existingError } = await supabase.from('clientes').select('id').eq('email', email);
       if (existing && existing.length > 0) {
         setError('Já existe um usuário com este e-mail.');
         setLoading(false);
         return;
       }
       // Cria usuário no Supabase Auth
-      const { error: signUpError } = await supabase.auth.signUp({ email: formData.username, password: formData.password });
+      const { error: signUpError } = await supabase.auth.signUp({ email, password: formData.password });
       if (signUpError) {
         setError(signUpError.message);
         setLoading(false);
         return;
       }
       // Cria registro na tabela clientes
-      await supabase.from('clientes').insert([{ nome: formData.name, email: formData.username, saldo: 0, role: 'user', pixKey: formData.pixKey }]);
+      await supabase.from('clientes').insert([{ nome: formData.name, email, saldo: 0, role: 'user', pixKey: formData.pixKey, whatsapp: formData.whatsapp || null }]);
     }
     // Atualizar lista
     const { data } = await supabase.from('clientes').select('*');
     setUsers(data || []);
     setShowModal(false);
     setEditingUser(null);
-    setFormData({ name: '', username: '', password: '', pixKey: '' });
+    setFormData({ name: '', username: '', password: '', pixKey: '', whatsapp: '' });
     setLoading(false);
   };
 
@@ -66,7 +73,8 @@ const UsersManagement = () => {
       name: user.name,
       username: user.username,
       password: '',
-      pixKey: user.pixKey
+      pixKey: user.pixKey,
+      whatsapp: user.whatsapp || ''
     });
     setShowModal(true);
   };
@@ -102,7 +110,7 @@ const UsersManagement = () => {
         <button
           onClick={() => {
             setEditingUser(null);
-            setFormData({ name: '', username: '', password: '', pixKey: '' });
+            setFormData({ name: '', username: '', password: '', pixKey: '', whatsapp: '' });
             setShowModal(true);
           }}
           className="mt-4 sm:mt-0 btn-primary flex items-center"
@@ -316,6 +324,17 @@ const UsersManagement = () => {
                   onChange={(e) => setFormData({ ...formData, pixKey: e.target.value })}
                   className="input-field"
                   placeholder="CPF, e-mail, telefone ou chave aleatória"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label className="form-label">WhatsApp (opcional)</label>
+                <input
+                  type="text"
+                  value={formData.whatsapp}
+                  onChange={e => setFormData({ ...formData, whatsapp: e.target.value })}
+                  className="input-field"
+                  placeholder="(99) 99999-9999"
                 />
               </div>
               
