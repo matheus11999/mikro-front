@@ -18,56 +18,216 @@ import ClientWithdrawals from './components/ClientWithdrawals';
 import TestePix from './pages/TestePix';
 import { supabase } from './lib/supabaseClient';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+interface User {
+  role: 'admin' | 'user';
+  id: string;
+  email: string;
+}
 
 const App = () => {
-  const [user, setUser] = useState<{ role: 'admin' | 'user', id: string } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        supabase
-          .from('clientes')
-          .select('id, role')
-          .eq('email', session.user.email)
-          .limit(1)
-          .then(({ data: clientes }) => {
-            if (clientes && clientes.length > 0) {
-              setUser({ role: clientes[0].role || 'user', id: clientes[0].id });
+    let mounted = true;
+
+    // Verificar sessão atual
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Erro ao verificar sessão:', error);
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (session?.user?.email) {
+          const { data: clientes, error: clienteError } = await supabase
+            .from('clientes')
+            .select('id, role, email')
+            .eq('email', session.user.email)
+            .limit(1);
+
+          if (clienteError) {
+            console.error('Erro ao buscar cliente:', clienteError);
+            if (mounted) {
+              setUser(null);
+              setLoading(false);
             }
-          });
-      } else {
-        setUser(null);
+            return;
+          }
+
+          if (clientes && clientes.length > 0 && mounted) {
+            setUser({
+              role: clientes[0].role || 'user',
+              id: clientes[0].id,
+              email: clientes[0].email
+            });
+          }
+        } else if (mounted) {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Erro inesperado:', error);
+        if (mounted) {
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    });
+    };
+
+    checkSession();
+
+    // Escutar mudanças de autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        
+        if (event === 'SIGNED_OUT' || !session?.user?.email) {
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          try {
+            const { data: clientes, error: clienteError } = await supabase
+              .from('clientes')
+              .select('id, role, email')
+              .eq('email', session.user.email)
+              .limit(1);
+
+            if (clienteError) {
+              console.error('Erro ao buscar cliente:', clienteError);
+              return;
+            }
+
+            if (clientes && clientes.length > 0 && mounted) {
+              setUser({
+                role: clientes[0].role || 'user',
+                id: clientes[0].id,
+                email: clientes[0].email
+              });
+            }
+          } catch (error) {
+            console.error('Erro ao processar mudança de auth:', error);
+          } finally {
+            if (mounted) {
+              setLoading(false);
+            }
+          }
+        }
+      }
+    );
+
     return () => {
-      listener?.subscription.unsubscribe();
+      mounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
   const handleLogin = async () => {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      const { data: clientes } = await supabase.from('clientes').select('id, role').eq('email', authUser.email).limit(1);
-      if (clientes && clientes.length > 0) {
-        setUser({ role: clientes[0].role || 'user', id: clientes[0].id });
+    try {
+      setLoading(true);
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error('Erro ao verificar usuário:', error);
+        setLoading(false);
+        return;
       }
+
+      if (authUser?.email) {
+        const { data: clientes, error: clienteError } = await supabase
+          .from('clientes')
+          .select('id, role, email')
+          .eq('email', authUser.email)
+          .limit(1);
+
+        if (clienteError) {
+          console.error('Erro ao buscar cliente:', clienteError);
+          setLoading(false);
+          return;
+        }
+
+        if (clientes && clientes.length > 0) {
+          setUser({
+            role: clientes[0].role || 'user',
+            id: clientes[0].id,
+            email: clientes[0].email
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Erro no login:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Erro ao fazer logout:', error);
+      }
+      setUser(null);
+    } catch (error) {
+      console.error('Erro inesperado no logout:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Função para deletar usuário do Auth
-  async function deleteUserFromAuth(email) {
-    // Buscar usuário pelo e-mail
-    const { data: { users } } = await supabase.auth.admin.listUsers();
-    const user = users.find(u => u.email === email);
-    if (user) {
-      await supabase.auth.admin.deleteUser(user.id);
+  async function deleteUserFromAuth(email: string) {
+    try {
+      const { data: { users }, error } = await supabase.auth.admin.listUsers();
+      if (error) {
+        console.error('Erro ao listar usuários:', error);
+        return;
+      }
+      
+      const user = users.find(u => u.email === email);
+      if (user) {
+        const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
+        if (deleteError) {
+          console.error('Erro ao deletar usuário:', deleteError);
+        }
+      }
+    } catch (error) {
+      console.error('Erro inesperado ao deletar usuário:', error);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -90,7 +250,7 @@ const App = () => {
                     <Route path="/macs" element={<MacsManagement />} />
                     <Route path="/withdrawals" element={<WithdrawalsManagement />} />
                     <Route path="/reports" element={<ReportsManagement />} />
-                    <Route path="/TestePix" element={<TestePix userRole={user.role} />} />
+                    <Route path="/TestePix" element={<TestePix />} />
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   </>
                 ) : (

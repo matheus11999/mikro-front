@@ -3,24 +3,27 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = 'https://zzfugxcsinasxrhcwvcp.supabase.co';
 const supabaseServiceRole = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6ZnVneGNzaW5hc3hyaGN3dmNwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDE4MjA1MSwiZXhwIjoyMDY1NzU4MDUxfQ.a8bDJlXu9njwn-PZ3Dg4Hf2FMmnWioxlagTfuSSezpg';
 
-// Singleton pattern global para evitar múltiplas instâncias
-declare global {
-  var __supabase_admin_client__: SupabaseClient | undefined;
-}
+// Singleton pattern mais robusto para evitar múltiplas instâncias do admin client
+let supabaseAdminInstance: SupabaseClient | null = null;
 
 function getSupabaseAdmin(): SupabaseClient {
-  if (!globalThis.__supabase_admin_client__) {
+  if (!supabaseAdminInstance) {
     if (!supabaseUrl || !supabaseServiceRole) {
       throw new Error('Supabase URL e Service Role são obrigatórios para o admin client.');
     }
-    globalThis.__supabase_admin_client__ = createClient(supabaseUrl, supabaseServiceRole, {
+    supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceRole, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'supabase-js-admin'
+        }
       }
     });
   }
-  return globalThis.__supabase_admin_client__;
+  return supabaseAdminInstance;
 }
 
 export const supabaseAdmin = getSupabaseAdmin();

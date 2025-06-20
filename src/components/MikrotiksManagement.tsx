@@ -157,8 +157,8 @@ const MikrotiksManagement = () => {
                 <span className="text-gray-900">{mikrotik.provider_name}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Lucro:</span>
-                <span className="font-semibold text-green-600">{mikrotik.profitPercentage}%</span>
+                <span className="text-gray-600">Lucro Admin:</span>
+                <span className="font-semibold text-green-600">{mikrotik.profitpercentage}%</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Status:</span>
@@ -245,8 +245,9 @@ const MikrotiksManagement = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Porcentagem de Lucro (%)</label>
-                  <input type="number" className="input-field" placeholder="Ex: 15" min="0" max="100" value={porcentagemLucro} onChange={e => setPorcentagemLucro(Number(e.target.value))} required />
+                                  <label className="form-label">Porcentagem de Lucro para Admin (%)</label>
+                <input type="number" className="input-field" placeholder="Ex: 10" min="0" max="100" value={porcentagemLucro} onChange={e => setPorcentagemLucro(Number(e.target.value))} required />
+                <p className="text-xs text-gray-500 mt-1">Restante vai para o proprietário do mikrotik</p>
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
@@ -454,8 +455,9 @@ const MikrotiksManagement = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Porcentagem de Lucro (%)</label>
-                  <input type="number" className="input-field" min="0" max="100" value={editPorcentagemLucro} onChange={e => setEditPorcentagemLucro(Number(e.target.value))} required />
+                                  <label className="form-label">Porcentagem de Lucro para Admin (%)</label>
+                <input type="number" className="input-field" min="0" max="100" value={editPorcentagemLucro} onChange={e => setEditPorcentagemLucro(Number(e.target.value))} required />
+                <p className="text-xs text-gray-500 mt-1">Restante vai para o proprietário do mikrotik</p>
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
