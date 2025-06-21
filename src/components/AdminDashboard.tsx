@@ -119,11 +119,11 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
+      <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 text-sm md:text-base">Carregando dashboard...</p>
+            <div className="loading-spinner h-12 w-12 mx-auto mb-4"></div>
+            <p className="text-gray-600 responsive-text">Carregando dashboard...</p>
           </div>
         </div>
       </div>
@@ -131,39 +131,45 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="responsive-padding py-4 lg:py-6 space-y-4 md:space-y-6 bg-gray-50 min-h-screen">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1 text-sm md:text-base">Visão geral do sistema</p>
+          <h1 className="responsive-title font-bold text-gray-900">Dashboard Administrativo</h1>
+          <p className="text-gray-600 mt-1 responsive-text">Visão geral completa do sistema</p>
         </div>
-        <div className="sm:mt-0">
-          <div className="inline-flex items-center px-3 py-1 rounded-full text-xs md:text-sm bg-green-100 text-green-800">
-            <Activity className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-            Sistema Online
+        <div className="flex items-center gap-3">
+          <div className="badge-success flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            <span>Sistema Online</span>
+          </div>
+          <div className="badge-info">
+            <span>Tempo real</span>
           </div>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 md:gap-4">
+      <div className="responsive-stats-grid">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2 md:mb-3">
-              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${stat.bgColor} flex items-center justify-center flex-shrink-0`}>
-                <stat.icon className={`w-4 h-4 md:w-5 md:h-5 ${stat.color.replace('bg-', 'text-')}`} />
+          <div key={index} className="stats-card-compact group hover-lift animate-slide-up" style={{ animationDelay: `${index * 0.1}s` }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className={`w-10 h-10 rounded-xl ${stat.bgColor} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                <stat.icon className={`w-5 h-5 ${stat.color.replace('bg-', 'text-')}`} />
               </div>
               {stat.change && (
-                <span className={`text-xs font-medium px-1.5 py-0.5 md:px-2 md:py-1 rounded-full ${
-                  stat.change.startsWith('+') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                <span className={`badge ${
+                  stat.change.startsWith('+') ? 'badge-success' : 'badge-danger'
                 }`}>
                   {stat.change}
                 </span>
               )}
             </div>
             <div>
-              <p className="text-base md:text-lg lg:text-xl font-bold text-gray-900 truncate">{stat.value}</p>
-              <p className="text-xs md:text-sm text-gray-600 truncate">{stat.title}</p>
+              <p className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                {stat.value}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">{stat.title}</p>
             </div>
           </div>
         ))}
