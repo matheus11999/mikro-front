@@ -465,4 +465,43 @@
   .divider-dashed {
     @apply border-t border-dashed border-gray-300;
   }
+
+  /* Additional responsive components */
+  .data-card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-all duration-200;
+  }
+
+  .mobile-card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all duration-200;
+  }
+
+  .search-filter-card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4;
+  }
+
+  /* Status badges */
+  .status-badge {
+    @apply inline-flex px-2 py-1 text-xs font-semibold rounded-full;
+  }
+
+  .status-active {
+    @apply bg-green-100 text-green-800;
+  }
+
+  .status-inactive {
+    @apply bg-red-100 text-red-800;
+  }
+
+  /* Modal improvements */
+  .modal-header {
+    @apply flex items-center justify-between mb-6;
+  }
+
+  .modal-title {
+    @apply text-xl font-bold text-gray-900;
+  }
+
+  .modal-close-btn {
+    @apply text-gray-400 hover:text-gray-600 text-xl min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors;
+  }
 }

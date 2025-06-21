@@ -48,10 +48,10 @@ const Login = ({ onLogin }: LoginProps) => {
         return;
       }
 
-      // Verificar dados do usuário na tabela users (se não encontrar, considerar como admin)
+      // Verificar dados do usuário na tabela clientes (se não encontrar, considerar como admin)
       const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id, role, is_active')
+        .from('clientes')
+        .select('id, role, ativo')
         .eq('email', email.toLowerCase().trim())
         .single();
 
@@ -59,17 +59,17 @@ const Login = ({ onLogin }: LoginProps) => {
       let userId = authData.user.id;
 
       if (userData && !userError) {
-        userRole = userData.role || 'admin';
+        userRole = userData.role || 'user';
         userId = userData.id;
         
-        if (userData.is_active === false) {
+        if (userData.ativo === false) {
           await supabase.auth.signOut();
           setError('Conta desativada. Entre em contato com o administrador.');
           return;
         }
       } else {
-        // Se não encontrou na tabela users, pode ser um admin direto do auth
-        console.log('Usuário não encontrado na tabela users, considerando como admin');
+        // Se não encontrou na tabela clientes, pode ser um admin direto do auth
+        console.log('Usuário não encontrado na tabela clientes, considerando como admin');
       }
 
       // Login bem-sucedido

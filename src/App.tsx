@@ -55,26 +55,39 @@ const App = () => {
         }
 
         if (session?.user?.email) {
-          const { data: users, error: userError } = await supabase
-            .from('users')
+          // Buscar na tabela clientes (consistência com resto da app)
+          const { data: clientes, error: clienteError } = await supabase
+            .from('clientes')
             .select('id, role, email')
             .eq('email', session.user.email)
             .limit(1);
 
-          if (userError) {
-            console.error('Erro ao buscar usuário:', userError);
+          if (clienteError) {
+            console.error('Erro ao buscar cliente:', clienteError);
+            // Se não encontrar na tabela clientes, considerar como admin
             if (mounted) {
-              setUser(null);
+              setUser({
+                role: 'admin',
+                id: session.user.id,
+                email: session.user.email
+              });
               setLoading(false);
             }
             return;
           }
 
-          if (users && users.length > 0 && mounted) {
+          if (clientes && clientes.length > 0 && mounted) {
             setUser({
-              role: users[0].role || 'user',
-              id: users[0].id,
-              email: users[0].email
+              role: clientes[0].role || 'user',
+              id: clientes[0].id,
+              email: clientes[0].email
+            });
+          } else if (mounted) {
+            // Se não encontrar na tabela clientes, considerar como admin
+            setUser({
+              role: 'admin',
+              id: session.user.id,
+              email: session.user.email
             });
           }
         } else if (mounted) {
@@ -109,22 +122,37 @@ const App = () => {
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
-            const { data: users, error: userError } = await supabase
-              .from('users')
+            const { data: clientes, error: clienteError } = await supabase
+              .from('clientes')
               .select('id, role, email')
               .eq('email', session.user.email)
               .limit(1);
 
-            if (userError) {
-              console.error('Erro ao buscar usuário:', userError);
+            if (clienteError) {
+              console.error('Erro ao buscar cliente:', clienteError);
+              // Se não encontrar na tabela clientes, considerar como admin
+              if (mounted) {
+                setUser({
+                  role: 'admin',
+                  id: session.user.id,
+                  email: session.user.email
+                });
+              }
               return;
             }
 
-            if (users && users.length > 0 && mounted) {
+            if (clientes && clientes.length > 0 && mounted) {
               setUser({
-                role: users[0].role || 'user',
-                id: users[0].id,
-                email: users[0].email
+                role: clientes[0].role || 'user',
+                id: clientes[0].id,
+                email: clientes[0].email
+              });
+            } else if (mounted) {
+              // Se não encontrar na tabela clientes, considerar como admin
+              setUser({
+                role: 'admin',
+                id: session.user.id,
+                email: session.user.email
               });
             }
           } catch (error) {

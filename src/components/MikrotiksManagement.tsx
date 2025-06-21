@@ -84,64 +84,90 @@ const MikrotiksManagement = () => {
     );
   });
 
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="loading-spinner h-12 w-12 mx-auto mb-4"></div>
+            <p className="text-gray-600 responsive-text">Carregando mikrotiks...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Gerenciar Mikrotiks</h1>
-          <p className="text-gray-600 mt-1">Gerencie todos os equipamentos e planos</p>
+          <h1 className="responsive-title font-bold text-gray-900 flex items-center">
+            <Radio className="w-6 h-6 sm:w-7 sm:h-7 mr-2 text-blue-600" />
+            <span className="hidden sm:inline">Gerenciar Mikrotiks</span>
+            <span className="sm:hidden">Mikrotiks</span>
+          </h1>
+          <p className="text-gray-600 mt-1 responsive-text">Gerencie todos os equipamentos e planos</p>
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="btn-primary flex items-center gap-2 mt-4 sm:mt-0"
+          className="btn-primary flex items-center gap-2 touch-target"
         >
           <Plus className="w-4 h-4" />
-          Novo Mikrotik
+          <span className="hidden sm:inline">Novo Mikrotik</span>
+          <span className="sm:hidden">Novo</span>
         </button>
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="search-filter-card animate-slide-up" style={{animationDelay: '0.1s'}}>
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por nome, proprietário ou provedor..."
+              placeholder="Buscar mikrotiks..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input-field pl-10"
             />
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary flex items-center gap-2">
+            <button className="btn-secondary flex items-center gap-2 touch-target">
               <BarChart3 className="w-4 h-4" />
-              Exportar
+              <span className="hidden sm:inline">Exportar</span>
             </button>
-            <button className="btn-secondary flex items-center gap-2">
+            <button 
+              onClick={fetchMikrotiks}
+              className="btn-secondary flex items-center gap-2 touch-target"
+            >
               <RefreshCw className="w-4 h-4" />
-              Atualizar
+              <span className="hidden sm:inline">Atualizar</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Mikrotiks Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredMikrotiks.map((mikrotik) => (
-          <div key={mikrotik.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+      <div className="responsive-grid animate-slide-up" style={{animationDelay: '0.2s'}}>
+        {filteredMikrotiks.map((mikrotik, index) => (
+          <div 
+            key={mikrotik.id} 
+            className="data-card group hover-lift"
+            style={{animationDelay: `${0.3 + index * 0.1}s`}}
+          >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-110 transition-transform">
                   <Radio className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">{mikrotik.name}</h3>
+                  <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{mikrotik.name}</h3>
                   <p className="text-xs text-gray-500">ID: {mikrotik.id}</p>
                 </div>
               </div>
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                mikrotik.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              <span className={`status-badge ${
+                mikrotik.status === 'Ativo' ? 'status-active' : 'status-inactive'
               }`}>
                 {mikrotik.status}
               </span>
@@ -172,13 +198,14 @@ const MikrotiksManagement = () => {
                   setSelectedMikrotik(mikrotik);
                   setShowPlansModal(true);
                 }}
-                className="flex-1 btn-primary text-sm flex items-center justify-center gap-2"
+                className="flex-1 btn-primary text-sm flex items-center justify-center gap-2 touch-target"
               >
                 <Settings className="w-4 h-4" />
-                Planos
+                <span className="hidden sm:inline">Planos</span>
+                <span className="sm:hidden">Ver</span>
               </button>
               <button
-                className="btn-secondary text-sm flex items-center justify-center"
+                className="btn-secondary text-sm flex items-center justify-center touch-target"
                 onClick={() => {
                   setEditMikrotik(mikrotik);
                   setEditNomeMikrotik(mikrotik.nome);

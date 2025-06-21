@@ -204,31 +204,47 @@ const PasswordsManagement = () => {
   const availableCount = passwords.filter(p => p.disponivel && !p.vendida).length;
   const soldCount = passwords.filter(p => p.vendida).length;
 
-  return (
-    <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 flex items-center">
-            <Key className="w-7 h-7 mr-2 text-indigo-600" />
-            Gerenciar Senhas
-          </h1>
-          <p className="text-gray-600 mt-1">Controle de senhas dos Mikrotiks</p>
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="loading-spinner h-12 w-12 mx-auto mb-4"></div>
+            <p className="text-gray-600 responsive-text">Carregando senhas...</p>
+          </div>
         </div>
-        <div className="mt-4 lg:mt-0 flex gap-2">
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="responsive-title font-bold text-gray-900 flex items-center">
+            <Key className="w-6 h-6 sm:w-7 sm:h-7 mr-2 text-indigo-600" />
+            <span className="hidden sm:inline">Gerenciar Senhas</span>
+            <span className="sm:hidden">Senhas</span>
+          </h1>
+          <p className="text-gray-600 mt-1 responsive-text">Controle de senhas dos Mikrotiks</p>
+        </div>
+        <div className="flex gap-2">
           <button
             onClick={() => setShowImportModal(true)}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary flex items-center gap-2 touch-target"
           >
             <Upload className="w-4 h-4" />
-            Importar Senhas
+            <span className="hidden sm:inline">Importar</span>
           </button>
           {selectedPasswords.length > 0 && (
             <button
               onClick={handleBulkDelete}
-              className="btn-danger flex items-center gap-2"
+              className="btn-danger flex items-center gap-2 touch-target"
             >
               <Trash2 className="w-4 h-4" />
-              Excluir ({selectedPasswords.length})
+              <span className="hidden sm:inline">Excluir ({selectedPasswords.length})</span>
+              <span className="sm:hidden">{selectedPasswords.length}</span>
             </button>
           )}
         </div>
