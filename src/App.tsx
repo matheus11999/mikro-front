@@ -55,14 +55,14 @@ const App = () => {
         }
 
         if (session?.user?.email) {
-          const { data: clientes, error: clienteError } = await supabase
-            .from('clientes')
+          const { data: users, error: userError } = await supabase
+            .from('users')
             .select('id, role, email')
             .eq('email', session.user.email)
             .limit(1);
 
-          if (clienteError) {
-            console.error('Erro ao buscar cliente:', clienteError);
+          if (userError) {
+            console.error('Erro ao buscar usuário:', userError);
             if (mounted) {
               setUser(null);
               setLoading(false);
@@ -70,11 +70,11 @@ const App = () => {
             return;
           }
 
-          if (clientes && clientes.length > 0 && mounted) {
+          if (users && users.length > 0 && mounted) {
             setUser({
-              role: clientes[0].role || 'user',
-              id: clientes[0].id,
-              email: clientes[0].email
+              role: users[0].role || 'user',
+              id: users[0].id,
+              email: users[0].email
             });
           }
         } else if (mounted) {
@@ -109,22 +109,22 @@ const App = () => {
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
-            const { data: clientes, error: clienteError } = await supabase
-              .from('clientes')
+            const { data: users, error: userError } = await supabase
+              .from('users')
               .select('id, role, email')
               .eq('email', session.user.email)
               .limit(1);
 
-            if (clienteError) {
-              console.error('Erro ao buscar cliente:', clienteError);
+            if (userError) {
+              console.error('Erro ao buscar usuário:', userError);
               return;
             }
 
-            if (clientes && clientes.length > 0 && mounted) {
+            if (users && users.length > 0 && mounted) {
               setUser({
-                role: clientes[0].role || 'user',
-                id: clientes[0].id,
-                email: clientes[0].email
+                role: users[0].role || 'user',
+                id: users[0].id,
+                email: users[0].email
               });
             }
           } catch (error) {
@@ -144,7 +144,7 @@ const App = () => {
     };
   }, []);
 
-  const handleLogin = async () => {
+  const handleLogin = async (userId: string, userRole: 'admin' | 'user') => {
     try {
       setLoading(true);
       const { data: { user: authUser }, error } = await supabase.auth.getUser();
@@ -156,25 +156,11 @@ const App = () => {
       }
 
       if (authUser?.email) {
-        const { data: clientes, error: clienteError } = await supabase
-          .from('clientes')
-          .select('id, role, email')
-          .eq('email', authUser.email)
-          .limit(1);
-
-        if (clienteError) {
-          console.error('Erro ao buscar cliente:', clienteError);
-          setLoading(false);
-          return;
-        }
-
-        if (clientes && clientes.length > 0) {
-          setUser({
-            role: clientes[0].role || 'user',
-            id: clientes[0].id,
-            email: clientes[0].email
-          });
-        }
+        setUser({
+          role: userRole,
+          id: userId,
+          email: authUser.email
+        });
       }
     } catch (error) {
       console.error('Erro no login:', error);
