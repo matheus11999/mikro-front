@@ -8,34 +8,39 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_KEY são obrigatórias');
 }
 
-// Singleton pattern mais robusto para evitar múltiplas instâncias
-let supabaseInstance: SupabaseClient | null = null;
+// Singleton pattern para evitar múltiplas instâncias
+const STORAGE_KEY = 'pix-mikro-auth-token';
 
-function getSupabaseClient(): SupabaseClient {
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storage: window.localStorage,
-        storageKey: 'supabase.auth.token'
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'supabase-js-web'
-        }
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 10
-        }
-      }
-    });
+// Verificar se já existe uma instância global
+if (typeof window !== 'undefined' && (window as any).__SUPABASE_CLIENT__) {
+  console.warn('Reutilizando instância existente do Supabase');
+}
+
+const supabaseInstance = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: STORAGE_KEY
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'pix-mikro-web'
+    }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
-  return supabaseInstance;
+});
+
+// Armazenar globalmente para evitar múltiplas instâncias
+if (typeof window !== 'undefined') {
+  (window as any).__SUPABASE_CLIENT__ = supabaseInstance;
 }
 
 // Exportar instância única
-export const supabase = getSupabaseClient();
-export const supabasePublic = supabase; 
+export const supabase = supabaseInstance;
+export const supabasePublic = supabaseInstance; 

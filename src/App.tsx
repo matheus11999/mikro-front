@@ -58,12 +58,12 @@ const App = () => {
           // Buscar na tabela clientes (consistência com resto da app)
           const { data: clientes, error: clienteError } = await supabase
             .from('clientes')
-            .select('id, role, email')
+            .select('id, role, ativo, email')
             .eq('email', session.user.email)
             .limit(1);
 
           if (clienteError) {
-            console.error('Erro ao buscar cliente:', clienteError);
+            console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
             // Se não encontrar na tabela clientes, considerar como admin
             if (mounted) {
               setUser({
@@ -124,12 +124,12 @@ const App = () => {
           try {
             const { data: clientes, error: clienteError } = await supabase
               .from('clientes')
-              .select('id, role, email')
+              .select('id, role, ativo, email')
               .eq('email', session.user.email)
               .limit(1);
 
             if (clienteError) {
-              console.error('Erro ao buscar cliente:', clienteError);
+              console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
               // Se não encontrar na tabela clientes, considerar como admin
               if (mounted) {
                 setUser({
