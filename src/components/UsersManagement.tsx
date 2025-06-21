@@ -72,7 +72,6 @@ const UsersManagement = () => {
           chave_pix: formData.chave_pix,
           whatsapp: formData.whatsapp,
           role: 'user',
-          ativo: true,
           saldo: 0,
           criado_em: new Date().toISOString()
         });
@@ -86,7 +85,6 @@ const UsersManagement = () => {
           chave_pix: formData.chave_pix,
           whatsapp: formData.whatsapp,
           role: 'user',
-          ativo: true,
           saldo: 0,
           criado_em: new Date().toISOString()
         };

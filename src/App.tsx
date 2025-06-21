@@ -58,7 +58,7 @@ const App = () => {
           // Buscar na tabela clientes (consistência com resto da app)
           const { data: clientes, error: clienteError } = await supabase
             .from('clientes')
-            .select('id, role, ativo, email')
+            .select('id, role, email')
             .eq('email', session.user.email)
             .limit(1);
 
@@ -124,7 +124,7 @@ const App = () => {
           try {
             const { data: clientes, error: clienteError } = await supabase
               .from('clientes')
-              .select('id, role, ativo, email')
+              .select('id, role, email')
               .eq('email', session.user.email)
               .limit(1);
 

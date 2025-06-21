@@ -11,36 +11,41 @@ if (!supabaseUrl || !supabaseKey) {
 // Singleton pattern para evitar múltiplas instâncias
 const STORAGE_KEY = 'pix-mikro-auth-token';
 
-// Verificar se já existe uma instância global
-if (typeof window !== 'undefined' && (window as any).__SUPABASE_CLIENT__) {
-  console.warn('Reutilizando instância existente do Supabase');
-}
-
-const supabaseInstance = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    storageKey: STORAGE_KEY
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'pix-mikro-web'
-    }
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
+// Função para criar ou reutilizar a instância do Supabase
+function createSupabaseClient() {
+  // Verificar se já existe uma instância global
+  if (typeof window !== 'undefined' && (window as any).__SUPABASE_CLIENT__) {
+    return (window as any).__SUPABASE_CLIENT__;
   }
-});
 
-// Armazenar globalmente para evitar múltiplas instâncias
-if (typeof window !== 'undefined') {
-  (window as any).__SUPABASE_CLIENT__ = supabaseInstance;
+  const instance = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      storageKey: STORAGE_KEY
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'pix-mikro-web'
+      }
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    }
+  });
+
+  // Armazenar globalmente para evitar múltiplas instâncias
+  if (typeof window !== 'undefined') {
+    (window as any).__SUPABASE_CLIENT__ = instance;
+  }
+
+  return instance;
 }
 
 // Exportar instância única
-export const supabase = supabaseInstance;
-export const supabasePublic = supabaseInstance; 
+export const supabase = createSupabaseClient();
+export const supabasePublic = supabase; 
