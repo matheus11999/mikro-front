@@ -253,64 +253,78 @@ const WithdrawalsManagement = () => {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 text-sm md:text-base">Carregando saques...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+    <div className="responsive-padding py-4 lg:py-6 space-y-4 md:space-y-6 bg-gray-50 min-h-screen">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 flex items-center">
-            <Wallet className="w-7 h-7 mr-2 text-green-600" />
-            Gerenciar Saques
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 flex items-center">
+            <Wallet className="w-6 h-6 md:w-7 md:h-7 mr-2 text-green-600" />
+            <span className="hidden sm:inline">Gerenciar Saques</span>
+            <span className="sm:hidden">Saques</span>
           </h1>
-          <p className="text-gray-600 mt-1">Processamento de solicitações de saque</p>
+          <p className="text-gray-600 mt-1 text-sm md:text-base">Processamento de solicitações de saque</p>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-              <Clock className="w-6 h-6 text-yellow-600" />
+            <div className="w-8 h-8 md:w-12 md:h-12 bg-yellow-100 rounded-lg md:rounded-xl flex items-center justify-center">
+              <Clock className="w-4 h-4 md:w-6 md:h-6 text-yellow-600" />
             </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{pendingCount}</p>
-              <p className="text-sm text-gray-600">Pendentes</p>
+            <div className="ml-2 md:ml-4 min-w-0 flex-1">
+              <p className="text-lg md:text-xl font-bold text-gray-900">{pendingCount}</p>
+              <p className="text-xs md:text-sm text-gray-600 truncate">Pendentes</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className="w-8 h-8 md:w-12 md:h-12 bg-green-100 rounded-lg md:rounded-xl flex items-center justify-center">
+              <CheckCircle className="w-4 h-4 md:w-6 md:h-6 text-green-600" />
             </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{completedCount}</p>
-              <p className="text-sm text-gray-600">Aprovados</p>
+            <div className="ml-2 md:ml-4 min-w-0 flex-1">
+              <p className="text-lg md:text-xl font-bold text-gray-900">{completedCount}</p>
+              <p className="text-xs md:text-sm text-gray-600 truncate">Aprovados</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-              <XCircle className="w-6 h-6 text-red-600" />
+            <div className="w-8 h-8 md:w-12 md:h-12 bg-red-100 rounded-lg md:rounded-xl flex items-center justify-center">
+              <XCircle className="w-4 h-4 md:w-6 md:h-6 text-red-600" />
             </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{rejectedCount}</p>
-              <p className="text-sm text-gray-600">Rejeitados</p>
+            <div className="ml-2 md:ml-4 min-w-0 flex-1">
+              <p className="text-lg md:text-xl font-bold text-gray-900">{rejectedCount}</p>
+              <p className="text-xs md:text-sm text-gray-600 truncate">Rejeitados</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
           <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-blue-600" />
+            <div className="w-8 h-8 md:w-12 md:h-12 bg-blue-100 rounded-lg md:rounded-xl flex items-center justify-center">
+              <DollarSign className="w-4 h-4 md:w-6 md:h-6 text-blue-600" />
             </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">R$ {totalPending.toFixed(2)}</p>
-              <p className="text-sm text-gray-600">Valor Pendente</p>
+            <div className="ml-2 md:ml-4 min-w-0 flex-1">
+              <p className="text-sm md:text-xl font-bold text-gray-900 truncate">R$ {totalPending.toFixed(2)}</p>
+              <p className="text-xs md:text-sm text-gray-600 truncate">Valor Pendente</p>
             </div>
           </div>
         </div>

@@ -27,12 +27,27 @@
     --radius: 0.75rem;
   }
 
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  /* Prevent horizontal overflow */
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
   }
 }
 
@@ -50,19 +65,19 @@
   }
   
   .btn-primary {
-    @apply btn-modern bg-blue-600 text-white hover:bg-blue-700 shadow-sm px-4 py-2;
+    @apply btn-modern bg-blue-600 text-white hover:bg-blue-700 shadow-sm px-3 py-2 md:px-4 md:py-2;
   }
   
   .btn-secondary {
-    @apply btn-modern bg-gray-100 text-gray-900 hover:bg-gray-200 px-4 py-2;
+    @apply btn-modern bg-gray-100 text-gray-900 hover:bg-gray-200 px-3 py-2 md:px-4 md:py-2;
   }
   
   .btn-success {
-    @apply btn-modern bg-green-600 text-white hover:bg-green-700 shadow-sm px-4 py-2;
+    @apply btn-modern bg-green-600 text-white hover:bg-green-700 shadow-sm px-3 py-2 md:px-4 md:py-2;
   }
   
   .btn-danger {
-    @apply btn-modern bg-red-600 text-white hover:bg-red-700 shadow-sm px-4 py-2;
+    @apply btn-modern bg-red-600 text-white hover:bg-red-700 shadow-sm px-3 py-2 md:px-4 md:py-2;
   }
   
   .input-field {
@@ -78,19 +93,19 @@
   }
   
   .stats-card {
-    @apply bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-all duration-300;
   }
   
   .data-table {
-    @apply bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden;
   }
   
   .table-header {
-    @apply px-6 py-4 bg-gray-50 border-b border-gray-200 text-sm font-semibold text-gray-700;
+    @apply px-4 py-3 md:px-6 md:py-4 bg-gray-50 border-b border-gray-200 text-sm font-semibold text-gray-700;
   }
   
   .table-cell {
-    @apply px-6 py-4 border-b border-gray-100 last:border-b-0;
+    @apply px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 last:border-b-0;
   }
   
   .badge-success {
@@ -115,5 +130,82 @@
   
   .sidebar-item.active {
     @apply bg-blue-600 text-white hover:bg-blue-700 hover:text-white;
+  }
+
+  /* Responsive Utilities */
+  .mobile-hidden {
+    @apply hidden md:block;
+  }
+
+  .mobile-only {
+    @apply block md:hidden;
+  }
+
+  .responsive-padding {
+    @apply px-4 md:px-6;
+  }
+
+  .responsive-text {
+    @apply text-sm md:text-base;
+  }
+
+  .responsive-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4;
+  }
+
+  .responsive-stats-grid {
+    @apply grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-4;
+  }
+
+  /* Table Responsive */
+  .table-responsive {
+    @apply w-full overflow-x-auto;
+  }
+
+  .table-responsive table {
+    @apply min-w-full;
+  }
+
+  .table-responsive th,
+  .table-responsive td {
+    @apply whitespace-nowrap text-xs md:text-sm;
+  }
+
+  /* Modal Responsive */
+  .modal-responsive {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 md:p-4 z-50;
+  }
+
+  .modal-content {
+    @apply bg-white rounded-lg w-full max-w-md mx-2 md:mx-auto p-4 md:p-6 max-h-[90vh] overflow-y-auto;
+  }
+
+  .modal-content-large {
+    @apply bg-white rounded-lg w-full max-w-2xl mx-2 md:mx-auto p-4 md:p-6 max-h-[90vh] overflow-y-auto;
+  }
+
+  /* Card Responsive */
+  .card-responsive {
+    @apply bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 lg:p-6;
+  }
+
+  /* Button Responsive */
+  .btn-responsive {
+    @apply text-xs md:text-sm px-2 py-1 md:px-3 md:py-2;
+  }
+
+  /* Hide scrollbars but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe area for mobile */
+  .safe-area-padding {
+    @apply pb-safe pt-safe;
   }
 }

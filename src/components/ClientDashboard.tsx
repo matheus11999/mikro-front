@@ -331,11 +331,11 @@ const ClientDashboard = () => {
 
   if (loading) {
     return (
-      <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
+      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
         <div className="flex items-center justify-center min-h-96">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
-            <span className="text-lg text-gray-600">Carregando dashboard...</span>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 text-sm md:text-base">Carregando dashboard...</p>
           </div>
         </div>
       </div>
@@ -344,11 +344,11 @@ const ClientDashboard = () => {
 
   if (!clientData) {
     return (
-      <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
+      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
-            <div className="text-red-500 text-lg font-semibold mb-2">Erro ao carregar dados</div>
-            <p className="text-gray-600">Não foi possível carregar os dados do cliente.</p>
+            <div className="text-red-500 text-base md:text-lg font-semibold mb-2">Erro ao carregar dados</div>
+            <p className="text-gray-600 text-sm md:text-base">Não foi possível carregar os dados do cliente.</p>
           </div>
         </div>
       </div>
@@ -356,71 +356,84 @@ const ClientDashboard = () => {
   }
 
   return (
-    <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+    <div className="responsive-padding py-4 lg:py-6 space-y-4 md:space-y-6 bg-gray-50 min-h-screen">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Dashboard do Cliente</h1>
-          <p className="text-gray-600 mt-1">Bem-vindo, {clientData.nome}</p>
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900">
+            <span className="hidden sm:inline">Dashboard do Cliente</span>
+            <span className="sm:hidden">Dashboard</span>
+          </h1>
+          <p className="text-gray-600 mt-1 text-sm md:text-base">Bem-vindo, {clientData.nome}</p>
         </div>
-        <div className="flex items-center gap-4 mt-4 lg:mt-0">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
           <button 
             onClick={() => window.location.reload()}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary flex items-center gap-2 text-xs md:text-sm"
           >
-            <RefreshCw className="w-4 h-4" />
-            Atualizar
+            <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Atualizar</span>
+            <span className="sm:hidden">Refresh</span>
           </button>
-          <div className="flex items-center bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-200">
+          <div className="flex items-center bg-white px-2 md:px-3 py-1 md:py-2 rounded-lg shadow-sm border border-gray-200">
             <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-            <span className="text-gray-600 text-sm font-medium">Online</span>
+            <span className="text-gray-600 text-xs md:text-sm font-medium">Online</span>
           </div>
         </div>
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-              <Wallet className="w-4 h-4 text-green-600" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 rounded-lg flex items-center justify-center">
+              <Wallet className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
             </div>
-            <span className="text-green-600 text-xs font-semibold">Disponível</span>
+            <span className="text-green-600 text-xs font-semibold hidden sm:block">Disponível</span>
           </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">R$ {Number(clientData.saldo || 0).toFixed(2)}</h3>
-          <p className="text-gray-600 text-sm">Saldo Atual</p>
+          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1 truncate">R$ {Number(clientData.saldo || 0).toFixed(2)}</h3>
+          <p className="text-gray-600 text-xs md:text-sm truncate">Saldo Atual</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-4 h-4 text-blue-600" />
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="w-6 h-6 md:w-8 md:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-3 h-3 md:w-4 md:h-4 text-blue-600" />
             </div>
-            <span className="text-blue-600 text-xs font-semibold">Este Mês</span>
+            <span className="text-blue-600 text-xs font-semibold hidden sm:block">Este Mês</span>
           </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">{dashboardStats.vendasMesAtual}</h3>
-          <p className="text-gray-600 text-sm">Vendas do Mês</p>
+          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1">{dashboardStats.vendasMesAtual}</h3>
+          <p className="text-gray-600 text-xs md:text-sm truncate">
+            <span className="hidden sm:inline">Vendas do Mês</span>
+            <span className="sm:hidden">Vendas</span>
+          </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-4 h-4 text-purple-600" />
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="w-6 h-6 md:w-8 md:h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-3 h-3 md:w-4 md:h-4 text-purple-600" />
             </div>
-            <span className="text-purple-600 text-xs font-semibold">Hoje</span>
+            <span className="text-purple-600 text-xs font-semibold hidden sm:block">Hoje</span>
           </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">R$ {dashboardStats.receitaDiaAtual.toFixed(2)}</h3>
-          <p className="text-gray-600 text-sm">Receita do Dia</p>
+          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1 truncate">R$ {dashboardStats.receitaDiaAtual.toFixed(2)}</h3>
+          <p className="text-gray-600 text-xs md:text-sm truncate">
+            <span className="hidden sm:inline">Receita do Dia</span>
+            <span className="sm:hidden">Receita</span>
+          </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Key className="w-4 h-4 text-orange-600" />
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="w-6 h-6 md:w-8 md:h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Key className="w-3 h-3 md:w-4 md:h-4 text-orange-600" />
             </div>
-            <span className="text-orange-600 text-xs font-semibold">Ativas</span>
+            <span className="text-orange-600 text-xs font-semibold hidden sm:block">Ativas</span>
           </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">{dashboardStats.totalSenhasDisponiveis}</h3>
-          <p className="text-gray-600 text-sm">Senhas Disponíveis</p>
+          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1">{dashboardStats.totalSenhasDisponiveis}</h3>
+          <p className="text-gray-600 text-xs md:text-sm truncate">
+            <span className="hidden sm:inline">Senhas Disponíveis</span>
+            <span className="sm:hidden">Senhas</span>
+          </p>
         </div>
       </div>
 

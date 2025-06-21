@@ -117,140 +117,163 @@ const AdminDashboard = () => {
     fetchDashboardData();
   }, []);
 
-  return (
-    <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">Visão geral do sistema</p>
+  if (loading) {
+    return (
+      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 text-sm md:text-base">Carregando dashboard...</p>
+          </div>
         </div>
-        <div className="mt-4 sm:mt-0">
-          <div className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-800">
-            <Activity className="w-4 h-4 mr-2" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="responsive-padding py-4 lg:py-6 space-y-4 md:space-y-6 bg-gray-50 min-h-screen">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-1 text-sm md:text-base">Visão geral do sistema</p>
+        </div>
+        <div className="sm:mt-0">
+          <div className="inline-flex items-center px-3 py-1 rounded-full text-xs md:text-sm bg-green-100 text-green-800">
+            <Activity className="w-3 h-3 md:w-4 md:h-4 mr-2" />
             Sistema Online
           </div>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 md:gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div className={`w-10 h-10 rounded-lg ${stat.bgColor} flex items-center justify-center`}>
-                <stat.icon className={`w-5 h-5 ${stat.color.replace('bg-', 'text-')}`} />
+          <div key={index} className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${stat.bgColor} flex items-center justify-center flex-shrink-0`}>
+                <stat.icon className={`w-4 h-4 md:w-5 md:h-5 ${stat.color.replace('bg-', 'text-')}`} />
               </div>
-              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                stat.change.startsWith('+') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-                {stat.change}
-              </span>
+              {stat.change && (
+                <span className={`text-xs font-medium px-1.5 py-0.5 md:px-2 md:py-1 rounded-full ${
+                  stat.change.startsWith('+') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {stat.change}
+                </span>
+              )}
             </div>
-            <div className="mt-3">
-              <p className="text-lg lg:text-xl font-bold text-gray-900">{stat.value}</p>
-              <p className="text-xs text-gray-600">{stat.title}</p>
+            <div>
+              <p className="text-base md:text-lg lg:text-xl font-bold text-gray-900 truncate">{stat.value}</p>
+              <p className="text-xs md:text-sm text-gray-600 truncate">{stat.title}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Charts and Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Recent Sales */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-4 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <ShoppingCart className="w-5 h-5 mr-2 text-blue-600" />
-              Vendas Recentes
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+          <div className="p-3 md:p-4 border-b border-gray-100">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
+              <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" />
+              <span className="hidden sm:inline">Vendas Recentes</span>
+              <span className="sm:hidden">Vendas</span>
             </h3>
           </div>
-          <div className="p-4">
-            <div className="space-y-3">
-              {recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                      <Router className="w-4 h-4 text-blue-600" />
+          <div className="p-3 md:p-4">
+            <div className="space-y-2 md:space-y-3 max-h-96 overflow-y-auto">
+              {recentSales.slice(0, 5).map((sale) => (
+                <div key={sale.id} className="flex items-center justify-between p-2 md:p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center min-w-0 flex-1">
+                    <div className="w-6 h-6 md:w-8 md:h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-2 md:mr-3 flex-shrink-0">
+                      <Router className="w-3 h-3 md:w-4 md:h-4 text-blue-600" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{sale.mikrotik}</p>
-                      <p className="text-xs text-gray-500">{sale.plan}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm font-medium text-gray-900 truncate">{sale.mikrotik}</p>
+                      <p className="text-xs text-gray-500 truncate">{sale.plan}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-green-600">{sale.value}</p>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="text-xs md:text-sm font-bold text-green-600">R$ {sale.value}</p>
                     <p className="text-xs text-gray-500">{sale.time}</p>
                   </div>
                 </div>
               ))}
+              {recentSales.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 text-sm">Nenhuma venda registrada</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Top Mikrotiks */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-4 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-green-600" />
-              Top Mikrotiks
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+          <div className="p-3 md:p-4 border-b border-gray-100">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
+              <TrendingUp className="w-4 h-4 md:w-5 md:h-5 mr-2 text-green-600" />
+              <span className="hidden sm:inline">Top Mikrotiks</span>
+              <span className="sm:hidden">Mikrotiks</span>
             </h3>
           </div>
-          <div className="p-4">
-            <div className="space-y-3">
+          <div className="p-3 md:p-4">
+            <div className="space-y-2 md:space-y-3">
               {topMikrotiks.map((mikrotik, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center mr-3">
-                      <span className="text-white text-xs font-bold">{index + 1}</span>
+                <div key={index} className="flex items-center justify-between p-2 md:p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center min-w-0 flex-1">
+                    <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 rounded-lg flex items-center justify-center mr-2 md:mr-3 flex-shrink-0">
+                      <span className="text-xs md:text-sm font-bold text-green-600">#{index + 1}</span>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{mikrotik.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm font-medium text-gray-900 truncate">{mikrotik.name}</p>
                       <p className="text-xs text-gray-500">{mikrotik.sales} vendas</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-green-600">{mikrotik.revenue}</p>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="text-xs md:text-sm font-bold text-green-600">{mikrotik.revenue}</p>
                   </div>
                 </div>
               ))}
+              {topMikrotiks.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 text-sm">Nenhum mikrotik cadastrado</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Top Users by Balance */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-4 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Users className="w-5 h-5 mr-2 text-purple-600" />
-              Top Usuários por Saldo
+        {/* Top Users */}
+        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-100">
+          <div className="p-3 md:p-4 border-b border-gray-100">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
+              <Users className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-600" />
+              <span className="hidden sm:inline">Top Usuários</span>
+              <span className="sm:hidden">Usuários</span>
             </h3>
           </div>
-          <div className="p-4">
-            <div className="space-y-3">
+          <div className="p-3 md:p-4">
+            <div className="space-y-2 md:space-y-3">
               {topUsers.map((user) => (
-                <div key={user.email} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${
-                      user.position === 1 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                      user.position === 2 ? 'bg-gradient-to-r from-gray-300 to-gray-500' :
-                      user.position === 3 ? 'bg-gradient-to-r from-orange-400 to-orange-600' :
-                      'bg-gradient-to-r from-blue-400 to-blue-600'
-                    }`}>
-                      <span className="text-white text-xs font-bold">{user.position}</span>
+                <div key={user.email} className="flex items-center justify-between p-2 md:p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center min-w-0 flex-1">
+                    <div className="w-6 h-6 md:w-8 md:h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-2 md:mr-3 flex-shrink-0">
+                      <span className="text-xs md:text-sm font-bold text-purple-600">#{user.position}</span>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm font-medium text-gray-900 truncate">{user.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-green-600">R$ {user.saldo.toFixed(2)}</p>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="text-xs md:text-sm font-bold text-green-600">R$ {user.saldo.toFixed(2)}</p>
                   </div>
                 </div>
               ))}
               {topUsers.length === 0 && (
-                <div className="text-center py-4 text-gray-500">
-                  <p className="text-sm">Nenhum usuário encontrado</p>
+                <div className="text-center py-8">
+                  <p className="text-gray-500 text-sm">Nenhum usuário cadastrado</p>
                 </div>
               )}
             </div>
