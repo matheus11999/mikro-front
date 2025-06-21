@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Clock, CheckCircle, XCircle, Plus, Search, Filter, DollarSign, AlertCircle } from 'lucide-react';
+import { Wallet, Clock, CheckCircle, XCircle, Plus, Search, Filter, DollarSign, AlertCircle, Eye, Download } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 
@@ -11,6 +11,10 @@ interface Withdrawal {
   status: string;
   requestdate: string;
   processeddate?: string;
+  proof_of_payment_url?: string;
+  approved_by?: string;
+  rejection_reason?: string;
+  approved_at?: string;
 }
 
 interface Cliente {
@@ -23,6 +27,8 @@ interface Cliente {
 
 const ClientWithdrawals = () => {
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showProofModal, setShowProofModal] = useState(false);
+  const [selectedProofUrl, setSelectedProofUrl] = useState('');
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [pixKey, setPixKey] = useState('');
   const [userWithdrawals, setUserWithdrawals] = useState<Withdrawal[]>([]);
@@ -147,14 +153,15 @@ const ClientWithdrawals = () => {
     }
 
     // Valor mínimo para saque
-    if (amount < 10) {
-      toast.error('Valor mínimo para saque é R$ 10,00');
+    if (amount < 50) {
+      toast.error('Valor mínimo para saque é R$ 50,00');
       return;
     }
 
     setSubmitting(true);
     try {
-      const { error } = await supabase
+      // Iniciar transação para descontar saldo e criar saque
+      const { data: withdrawal, error: withdrawalError } = await supabase
         .from('withdrawals')
         .insert({
           cliente_id: currentUser.id,
@@ -162,11 +169,27 @@ const ClientWithdrawals = () => {
           pixkey: pixKey.trim(),
           status: 'pending',
           requestdate: new Date().toISOString()
-        });
+        })
+        .select()
+        .single();
 
-      if (error) {
-        console.error('Erro ao solicitar saque:', error);
+      if (withdrawalError) {
+        console.error('Erro ao solicitar saque:', withdrawalError);
         toast.error('Erro ao solicitar saque. Tente novamente.');
+        return;
+      }
+
+      // Descontar o valor do saldo do cliente
+      const { error: updateError } = await supabase
+        .from('clientes')
+        .update({ saldo: currentUser.saldo - amount })
+        .eq('id', currentUser.id);
+
+      if (updateError) {
+        console.error('Erro ao atualizar saldo:', updateError);
+        // Reverter o saque se não conseguir atualizar saldo
+        await supabase.from('withdrawals').delete().eq('id', withdrawal.id);
+        toast.error('Erro ao processar saque. Tente novamente.');
         return;
       }
 
@@ -178,7 +201,7 @@ const ClientWithdrawals = () => {
           .eq('id', currentUser.id);
       }
 
-      toast.success('Saque solicitado com sucesso!');
+      toast.success('Saque solicitado com sucesso! O valor foi descontado do seu saldo.');
       setShowRequestModal(false);
       setWithdrawalAmount('');
       await fetchWithdrawals();
@@ -194,12 +217,17 @@ const ClientWithdrawals = () => {
     }
   };
 
+  const openProofModal = (url: string) => {
+    setSelectedProofUrl(url);
+    setShowProofModal(true);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
         return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pendente</span>;
       case 'completed':
-        return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Processado</span>;
+        return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Aprovado</span>;
       case 'rejected':
         return <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Rejeitado</span>;
       default:
@@ -238,7 +266,7 @@ const ClientWithdrawals = () => {
         <button 
           onClick={() => setShowRequestModal(true)}
           className="btn-primary flex items-center gap-2 mt-4 sm:mt-0"
-          disabled={!currentUser || currentUser.saldo < 10}
+          disabled={!currentUser || currentUser.saldo < 50}
         >
           <Plus className="w-4 h-4" />
           Solicitar Saque
@@ -253,7 +281,8 @@ const ClientWithdrawals = () => {
             <h3 className="text-sm font-medium text-blue-800">Informações importantes</h3>
             <div className="text-sm text-blue-700 mt-1">
               <ul className="list-disc list-inside space-y-1">
-                <li>Valor mínimo para saque: R$ 10,00</li>
+                <li>Valor mínimo para saque: R$ 50,00</li>
+                <li>O valor é descontado imediatamente do seu saldo</li>
                 <li>Processamento em até 24 horas úteis</li>
                 <li>Confirme sua chave PIX antes de solicitar</li>
               </ul>
@@ -283,7 +312,7 @@ const ClientWithdrawals = () => {
             </div>
             <div className="ml-4">
               <p className="text-lg font-bold text-gray-900">{completedCount}</p>
-              <p className="text-sm text-gray-600">Processados</p>
+              <p className="text-sm text-gray-600">Aprovados</p>
             </div>
           </div>
         </div>
@@ -342,7 +371,7 @@ const ClientWithdrawals = () => {
             >
               <option value="all">Todos os status</option>
               <option value="pending">Pendente</option>
-              <option value="completed">Processado</option>
+              <option value="completed">Aprovado</option>
               <option value="rejected">Rejeitado</option>
             </select>
           </div>
@@ -364,12 +393,13 @@ const ClientWithdrawals = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Solicitação</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Processamento</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprovante</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredWithdrawals.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center">
+                  <td colSpan={6} className="px-6 py-8 text-center">
                     <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-500">Nenhum saque encontrado</p>
                   </td>
@@ -386,7 +416,14 @@ const ClientWithdrawals = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(withdrawal.status)}
+                      <div className="flex flex-col space-y-1">
+                        {getStatusBadge(withdrawal.status)}
+                        {withdrawal.status === 'rejected' && withdrawal.rejection_reason && (
+                          <p className="text-xs text-red-600 max-w-xs">
+                            {withdrawal.rejection_reason}
+                          </p>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(withdrawal.requestdate).toLocaleDateString('pt-BR', {
@@ -409,6 +446,19 @@ const ClientWithdrawals = () => {
                         '-'
                       }
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {withdrawal.proof_of_payment_url ? (
+                        <button
+                          onClick={() => openProofModal(withdrawal.proof_of_payment_url!)}
+                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Ver Comprovante
+                        </button>
+                      ) : (
+                        withdrawal.status === 'completed' ? 'Sem comprovante' : '-'
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -429,7 +479,7 @@ const ClientWithdrawals = () => {
                 <input
                   type="number"
                   step="0.01"
-                  min="10"
+                  min="50"
                   max={currentUser?.saldo || 0}
                   value={withdrawalAmount}
                   onChange={(e) => setWithdrawalAmount(e.target.value)}
@@ -438,7 +488,7 @@ const ClientWithdrawals = () => {
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Disponível: R$ {Number(currentUser?.saldo || 0).toFixed(2)} | Mínimo: R$ 10,00
+                  Disponível: R$ {Number(currentUser?.saldo || 0).toFixed(2)} | Mínimo: R$ 50,00
                 </p>
               </div>
               
@@ -472,6 +522,46 @@ const ClientWithdrawals = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Proof of Payment Modal */}
+      {showProofModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Comprovante de Pagamento</h2>
+              <button
+                onClick={() => setShowProofModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="text-center">
+              <img 
+                src={selectedProofUrl} 
+                alt="Comprovante de Pagamento" 
+                className="max-w-full max-h-96 mx-auto rounded-lg shadow-lg"
+                onError={(e) => {
+                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMDAgMTMwQzEwNy4yODkgMTMwIDExMy4xNjkgMTI0LjEyIDExMy4xNjkgMTE2LjgzMUMxMTMuMTY5IDEwOS41NDIgMTA3LjI4OSAxMDMuNjYyIDEwMCAxMDMuNjYyQzkyLjcxMDkgMTAzLjY2MiA4Ni44MzA3IDEwOS41NDIgODYuODMwNyAxMTYuODMxQzg2LjgzMDcgMTI0LjEyIDkyLjcxMDkgMTMwIDEwMCAxMzBaIiBmaWxsPSIjOUI5QjlCIi8+CjxwYXRoIGQ9Ik03NSA3MEgxMjVWODVINzVWNzBaIiBmaWxsPSIjOUI5QjlCIi8+Cjx0ZXh0IHg9IjEwMCIgeT0iMTYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOUI5QjlCIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiI+SW1hZ2VtIG7Do28gZW5jb250cmFkYTwvdGV4dD4KPC9zdmc+';
+                }}
+              />
+              
+              <div className="mt-4 flex justify-center">
+                <a
+                  href={selectedProofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Baixar Comprovante
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -160,14 +160,14 @@ const ClientDashboard = () => {
               const sold = senhasArray.filter(s => s.vendida).length;
               const totalPasswords = senhasArray.length;
 
-              // Calcular receita deste plano
+              // Calcular receita deste plano (usar campo valor)
               const { data: vendasPlano } = await supabase
                 .from('vendas')
-                .select('preco')
+                .select('valor')
                 .eq('plano_id', plano.id)
                 .eq('status', 'aprovado');
 
-              const revenue = (vendasPlano || []).reduce((acc, venda) => acc + (Number(venda.preco || 0)), 0);
+              const revenue = (vendasPlano || []).reduce((acc, venda) => acc + (Number(venda.valor || 0)), 0);
 
               planosWithSenhas.push({
                 ...plano,
@@ -271,28 +271,28 @@ const ClientDashboard = () => {
 
       const vendasMesAtual = vendasMes?.length || 0;
 
-      // 3. Receita do dia atual - buscar por mikrotik_id
+      // 3. Receita do dia atual - usar campo valor que contém a parte do cliente
       const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
       const fimDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000 - 1);
 
       const { data: vendasDia } = await supabase
         .from('vendas')
-        .select('preco')
+        .select('valor')
         .in('mikrotik_id', mikrotikIds)
         .eq('status', 'aprovado')
         .gte('data', inicioDia.toISOString())
         .lte('data', fimDia.toISOString());
 
-      const receitaDiaAtual = (vendasDia || []).reduce((acc, venda) => acc + (Number(venda.preco || 0)), 0);
+      const receitaDiaAtual = (vendasDia || []).reduce((acc, venda) => acc + (Number(venda.valor || 0)), 0);
 
-      // 4. Total de receita geral - buscar por mikrotik_id
+      // 4. Total de receita geral - usar campo valor que contém a parte do cliente
       const { data: todasVendas } = await supabase
         .from('vendas')
-        .select('preco')
+        .select('valor')
         .in('mikrotik_id', mikrotikIds)
         .eq('status', 'aprovado');
 
-      const totalReceita = (todasVendas || []).reduce((acc, venda) => acc + (Number(venda.preco || 0)), 0);
+      const totalReceita = (todasVendas || []).reduce((acc, venda) => acc + (Number(venda.valor || 0)), 0);
 
       setDashboardStats({
         totalSenhasDisponiveis,

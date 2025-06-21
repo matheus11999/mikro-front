@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Key, CheckCircle, Upload, Search, RefreshCw, BarChart3, DollarSign, Filter, Edit, Trash2, Download } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 const PasswordsManagement = () => {
   const [passwords, setPasswords] = useState([]);
@@ -19,6 +20,7 @@ const PasswordsManagement = () => {
   const [planMap, setPlanMap] = useState({});
   const [mikrotikMap, setMikrotikMap] = useState({});
   const [totalReceita, setTotalReceita] = useState(0);
+  const [importLoading, setImportLoading] = useState(false);
 
   useEffect(() => {
     async function fetchPasswords() {
@@ -75,35 +77,86 @@ const PasswordsManagement = () => {
   }, []);
 
   const handleImport = async () => {
-    if (!selectedMikrotik || !selectedPlan || !importData) return;
-    const { data: existentes } = await supabase
-      .from('senhas')
-      .select('usuario, senha')
-      .eq('plano_id', selectedPlan);
-    const existentesSet = new Set((existentes || []).map(s => `${s.usuario}:${s.senha}`));
-    const linhas = importData.split('\n').map(l => l.trim()).filter(Boolean);
-    const pares = linhas.map(l => {
-      const [usuario, senha] = l.split(':');
-      return { usuario: usuario?.trim(), senha: senha?.trim() };
-    }).filter(p => p.usuario && p.senha);
-    const novas = pares.filter(p => !existentesSet.has(`${p.usuario}:${p.senha}`));
-    if (novas.length > 0) {
-      await supabase.from('senhas').insert(novas.map(p => ({
-        usuario: p.usuario,
-        senha: p.senha,
-        disponivel: true,
-        vendida: false,
-        plano_id: selectedPlan
-      })));
+    if (!selectedMikrotik || !selectedPlan || !importData) {
+      alert('Por favor, selecione o Mikrotik, Plano e forneça os dados das senhas.');
+      return;
     }
-    setShowImportModal(false);
-    setImportData('');
-    setSelectedMikrotik('');
-    setSelectedPlan('');
-    setLoading(true);
-    const { data, error } = await supabase.from('senhas').select('*');
-    if (!error) setPasswords(data || []);
-    setLoading(false);
+
+    try {
+      setImportLoading(true);
+      
+             // Busca senhas existentes usando cliente administrativo
+       const { data: existentes, error: errorExistentes } = await supabaseAdmin
+         .from('senhas')
+         .select('usuario, senha')
+         .eq('plano_id', selectedPlan);
+      
+      if (errorExistentes) {
+        console.error('Erro ao buscar senhas existentes:', errorExistentes);
+        throw new Error('Erro ao verificar senhas existentes');
+      }
+      
+      const existentesSet = new Set((existentes || []).map(s => `${s.usuario}:${s.senha}`));
+      
+      // Processa os dados de entrada
+      const linhas = importData.split('\n').map(l => l.trim()).filter(Boolean);
+      const pares = linhas.map(l => {
+        const [usuario, senha] = l.split(':');
+        return { usuario: usuario?.trim(), senha: senha?.trim() };
+      }).filter(p => p.usuario && p.senha);
+      
+             if (pares.length === 0) {
+         alert('Nenhuma senha válida encontrada. Use o formato: usuario:senha');
+         setImportLoading(false);
+         return;
+       }
+      
+      // Filtra apenas senhas novas
+      const novas = pares.filter(p => !existentesSet.has(`${p.usuario}:${p.senha}`));
+      
+      console.log(`Processando importação: ${linhas.length} linhas, ${pares.length} pares válidos, ${novas.length} novas`);
+      
+             if (novas.length > 0) {
+         const { error: errorInsert } = await supabaseAdmin.from('senhas').insert(novas.map(p => ({
+           usuario: p.usuario,
+           senha: p.senha,
+           disponivel: true,
+           vendida: false,
+           plano_id: selectedPlan,
+           criada_em: new Date().toISOString()
+         })));
+        
+        if (errorInsert) {
+          console.error('Erro ao inserir senhas:', errorInsert);
+          throw new Error('Erro ao salvar senhas no banco de dados');
+        }
+      }
+      
+      // Feedback para o usuário
+      const duplicadas = pares.length - novas.length;
+      let mensagem = `${novas.length} senhas importadas com sucesso!`;
+      if (duplicadas > 0) {
+        mensagem += ` (${duplicadas} já existiam e foram ignoradas)`;
+      }
+      
+      alert(mensagem);
+      
+      // Limpa o modal
+      setShowImportModal(false);
+      setImportData('');
+      setSelectedMikrotik('');
+      setSelectedPlan('');
+      
+      // Recarrega a lista de senhas
+      const { data, error } = await supabase.from('senhas').select('*');
+      if (!error) setPasswords(data || []);
+      
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      alert(`Erro ao importar senhas: ${error.message}`);
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   const handleEdit = (password: any) => {
@@ -114,7 +167,7 @@ const PasswordsManagement = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta senha?')) {
       setLoading(true);
-      const { error } = await supabase.from('senhas').delete().eq('id', id);
+      const { error } = await supabaseAdmin.from('senhas').delete().eq('id', id);
       if (error) {
         console.error('Erro ao excluir senha:', error);
         alert('Erro ao excluir senha. Tente novamente.');
@@ -128,7 +181,7 @@ const PasswordsManagement = () => {
   const handleBulkDelete = async () => {
     if (window.confirm(`Tem certeza que deseja excluir ${selectedPasswords.length} senhas?`)) {
       setLoading(true);
-      const { error } = await supabase.from('senhas').delete().in('id', selectedPasswords);
+      const { error } = await supabaseAdmin.from('senhas').delete().in('id', selectedPasswords);
       if (error) {
         console.error('Erro ao excluir senhas:', error);
         alert('Erro ao excluir senhas. Tente novamente.');
@@ -466,9 +519,16 @@ const PasswordsManagement = () => {
                 <button
                   onClick={handleImport}
                   className="flex-1 btn-primary"
-                  disabled={!selectedMikrotik || !selectedPlan || !importData}
+                  disabled={!selectedMikrotik || !selectedPlan || !importData || importLoading}
                 >
-                  Importar
+                  {importLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      Importando...
+                    </>
+                  ) : (
+                    'Importar'
+                  )}
                 </button>
               </div>
             </div>

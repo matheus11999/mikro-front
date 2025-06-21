@@ -67,6 +67,14 @@ const AdminDashboard = () => {
           bgColor: 'bg-emerald-50',
         },
         {
+          title: 'Lucro Admin',
+          value: `R$ ${(vendas?.reduce((sum, v) => sum + (v.lucro || 0), 0)).toFixed(2)}`,
+          change: '',
+          icon: TrendingUp,
+          color: 'bg-indigo-500',
+          bgColor: 'bg-indigo-50',
+        },
+        {
           title: 'Saques Pendentes',
           value: withdrawals?.length || 0,
           change: '',
@@ -82,8 +90,8 @@ const AdminDashboard = () => {
         plan: venda.plano_id,
         value: venda.preco,
         time: new Date(venda.data).toLocaleTimeString(),
-        saldo_admin: venda.preco ? (venda.preco * 0.1).toFixed(2) : '0.00',
-        saldo_cliente: venda.preco ? (venda.preco * 0.9).toFixed(2) : '0.00',
+        saldo_admin: venda.lucro || 0,
+        saldo_cliente: venda.valor || 0,
       })));
 
       setTopMikrotiks(mikrotiks.map((mikrotik) => ({
