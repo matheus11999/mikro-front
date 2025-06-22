@@ -1,558 +1,899 @@
 import React, { useState, useEffect } from 'react';
-import { Key, CheckCircle, Upload, Search, RefreshCw, BarChart3, DollarSign, Filter, Edit, Trash2, Download } from 'lucide-react';
-import { supabase, getSupabaseAdmin } from '../lib/supabaseClient';
+import { 
+  Key, 
+  CheckCircle, 
+  Upload, 
+  Search, 
+  RefreshCw, 
+  BarChart3, 
+  DollarSign, 
+  Filter, 
+  Edit, 
+  Trash2, 
+  Download,
+  AlertCircle,
+  CheckCircle2,
+  MoreHorizontal,
+  Shield,
+  Clock,
+  Users,
+  Wifi
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { supabase, getSupabaseAdmin } from '@/lib/supabaseClient';
+import { useLogger } from '@/lib/logger';
+
+interface Password {
+  id: string;
+  usuario: string;
+  senha: string;
+  plano_id: string;
+  disponivel: boolean;
+  vendida: boolean;
+  criada_em: string;
+  vendida_em?: string;
+}
+
+interface Plan {
+  id: string;
+  nome: string;
+  preco: number;
+  mikrotik_id: string;
+}
+
+interface Mikrotik {
+  id: string;
+  nome: string;
+}
 
 const PasswordsManagement = () => {
-  const [passwords, setPasswords] = useState([]);
+  const log = useLogger('PasswordsManagement');
+  const [passwords, setPasswords] = useState<Password[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [mikrotiks, setMikrotiks] = useState<Mikrotik[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  
   const [showImportModal, setShowImportModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [importData, setImportData] = useState('');
-  const [selectedMikrotik, setSelectedMikrotik] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState('');
-  const [editingPassword, setEditingPassword] = useState<any>(null);
-  const [selectedPasswords, setSelectedPasswords] = useState<number[]>([]);
+  const [editingPassword, setEditingPassword] = useState<Password | null>(null);
+  const [selectedPasswords, setSelectedPasswords] = useState<string[]>([]);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [plans, setPlans] = useState([]);
-  const [mikrotiks, setMikrotiks] = useState([]);
-  const [planMap, setPlanMap] = useState({});
-  const [mikrotikMap, setMikrotikMap] = useState({});
-  const [totalReceita, setTotalReceita] = useState(0);
+  const [planFilter, setPlanFilter] = useState('all');
+  
+  const [importData, setImportData] = useState({
+    mikrotik_id: '',
+    plano_id: '',
+    text: ''
+  });
   const [importLoading, setImportLoading] = useState(false);
+  
+  const [editFormData, setEditFormData] = useState({
+    usuario: '',
+    senha: '',
+    disponivel: true
+  });
 
   useEffect(() => {
-    async function fetchPasswords() {
+    log.mount();
+    fetchData();
+    
+    return () => {
+      log.unmount();
+    };
+  }, []);
+
+  const fetchData = async () => {
+    const timerId = log.startTimer('fetch-data');
+    
+    try {
+      log.info('Fetching passwords data');
       setLoading(true);
-      const { data, error } = await supabase.from('senhas').select('*');
-      if (!error) setPasswords(data || []);
+      setError('');
+      
+      const [passwordsResult, plansResult, mikrotiksResult, vendasResult] = await Promise.all([
+        supabase.from('senhas').select('*'),
+        supabase.from('planos').select('id, nome, preco, mikrotik_id'),
+        supabase.from('mikrotiks').select('id, nome'),
+        supabase.from('vendas').select('valor')
+      ]);
+      
+      if (passwordsResult.error) throw passwordsResult.error;
+      if (plansResult.error) throw plansResult.error;
+      if (mikrotiksResult.error) throw mikrotiksResult.error;
+      
+      setPasswords(passwordsResult.data || []);
+      setPlans(plansResult.data || []);
+      setMikrotiks(mikrotiksResult.data || []);
+      
+      log.info('Data fetched successfully', { 
+        passwords: passwordsResult.data?.length,
+        plans: plansResult.data?.length,
+        mikrotiks: mikrotiksResult.data?.length
+      });
+      
+    } catch (err) {
+      log.error('Failed to fetch data', err);
+      setError('Erro ao carregar dados');
+    } finally {
       setLoading(false);
+      log.endTimer(timerId, 'fetch-data');
     }
-    fetchPasswords();
-  }, []);
+  };
 
-  useEffect(() => {
-    async function fetchMikrotiks() {
-      const { data, error } = await supabase.from('mikrotiks').select('id, nome');
-      if (!error) setMikrotiks(data || []);
-    }
-    fetchMikrotiks();
-  }, []);
-
-  useEffect(() => {
-    async function fetchPlans() {
-      if (selectedMikrotik) {
-        const { data, error } = await supabase.from('planos').select('*').eq('mikrotik_id', selectedMikrotik);
-        if (!error) setPlans(data || []);
-      } else {
-        setPlans([]);
-      }
-    }
-    fetchPlans();
-  }, [selectedMikrotik]);
-
-  useEffect(() => {
-    async function fetchAllPlansAndMikrotiks() {
-      const { data: planos } = await supabase.from('planos').select('id, nome, mikrotik_id');
-      const { data: mikrotiksData } = await supabase.from('mikrotiks').select('id, nome');
-      const planMapObj = {};
-      (planos || []).forEach(p => { planMapObj[p.id] = p; });
-      setPlanMap(planMapObj);
-      const mikrotikMapObj = {};
-      (mikrotiksData || []).forEach(m => { mikrotikMapObj[m.id] = m; });
-      setMikrotikMap(mikrotikMapObj);
-    }
-    fetchAllPlansAndMikrotiks();
-  }, []);
-
-  useEffect(() => {
-    async function fetchReceita() {
-      const { data } = await supabase.from('vendas').select('valor');
-      if (data) {
-        setTotalReceita(data.reduce((acc, v) => acc + Number(v.valor || 0), 0));
-      }
-    }
-    fetchReceita();
-  }, []);
-
-  const handleImport = async () => {
-    if (!selectedMikrotik || !selectedPlan || !importData) {
-      alert('Por favor, selecione o Mikrotik, Plano e forneça os dados das senhas.');
+  const handleImportPasswords = async () => {
+    if (!importData.mikrotik_id || !importData.plano_id || !importData.text.trim()) {
+      setError('Por favor, selecione o Mikrotik, Plano e forneça os dados das senhas.');
       return;
     }
-
+    
+    const timerId = log.startTimer('import-passwords');
+    
     try {
+      log.info('Importing passwords');
       setImportLoading(true);
+      setError('');
       
-             // Busca senhas existentes usando cliente administrativo
-       const supabaseAdmin = getSupabaseAdmin();
-       const { data: existentes, error: errorExistentes } = await supabaseAdmin
-         .from('senhas')
-         .select('usuario, senha')
-         .eq('plano_id', selectedPlan);
+      const supabaseAdmin = getSupabaseAdmin();
       
-      if (errorExistentes) {
-        console.error('Erro ao buscar senhas existentes:', errorExistentes);
-        throw new Error('Erro ao verificar senhas existentes');
-      }
+      // Verificar senhas existentes
+      const { data: existing, error: existingError } = await supabaseAdmin
+        .from('senhas')
+        .select('usuario, senha')
+        .eq('plano_id', importData.plano_id);
       
-      const existentesSet = new Set((existentes || []).map(s => `${s.usuario}:${s.senha}`));
+      if (existingError) throw existingError;
       
-      // Processa os dados de entrada
-      const linhas = importData.split('\n').map(l => l.trim()).filter(Boolean);
-      const pares = linhas.map(l => {
+      const existingSet = new Set((existing || []).map(s => `${s.usuario}:${s.senha}`));
+      
+      // Processar dados de entrada
+      const lines = importData.text.split('\n').map(l => l.trim()).filter(Boolean);
+      const pairs = lines.map(l => {
         const [usuario, senha] = l.split(':');
         return { usuario: usuario?.trim(), senha: senha?.trim() };
       }).filter(p => p.usuario && p.senha);
       
-             if (pares.length === 0) {
-         alert('Nenhuma senha válida encontrada. Use o formato: usuario:senha');
-         setImportLoading(false);
-         return;
-       }
+      if (pairs.length === 0) {
+        throw new Error('Nenhuma senha válida encontrada. Use o formato: usuario:senha');
+      }
       
-      // Filtra apenas senhas novas
-      const novas = pares.filter(p => !existentesSet.has(`${p.usuario}:${p.senha}`));
+      // Filtrar apenas senhas novas
+      const newPasswords = pairs.filter(p => !existingSet.has(`${p.usuario}:${p.senha}`));
       
-      console.log(`Processando importação: ${linhas.length} linhas, ${pares.length} pares válidos, ${novas.length} novas`);
-      
-             if (novas.length > 0) {
-         const { error: errorInsert } = await supabaseAdmin.from('senhas').insert(novas.map(p => ({
-           usuario: p.usuario,
-           senha: p.senha,
-           disponivel: true,
-           vendida: false,
-           plano_id: selectedPlan,
-           criada_em: new Date().toISOString()
-         })));
+      if (newPasswords.length > 0) {
+        const { error } = await supabaseAdmin.from('senhas').insert(
+          newPasswords.map(p => ({
+            usuario: p.usuario,
+            senha: p.senha,
+            disponivel: true,
+            vendida: false,
+            plano_id: importData.plano_id,
+            criada_em: new Date().toISOString()
+          }))
+        );
         
-        if (errorInsert) {
-          console.error('Erro ao inserir senhas:', errorInsert);
-          throw new Error('Erro ao salvar senhas no banco de dados');
-        }
+        if (error) throw error;
       }
       
-      // Feedback para o usuário
-      const duplicadas = pares.length - novas.length;
-      let mensagem = `${novas.length} senhas importadas com sucesso!`;
-      if (duplicadas > 0) {
-        mensagem += ` (${duplicadas} já existiam e foram ignoradas)`;
+      const duplicated = pairs.length - newPasswords.length;
+      let message = `${newPasswords.length} senhas importadas com sucesso!`;
+      if (duplicated > 0) {
+        message += ` (${duplicated} já existiam e foram ignoradas)`;
       }
       
-      alert(mensagem);
-      
-      // Limpa o modal
+      setSuccess(message);
       setShowImportModal(false);
-      setImportData('');
-      setSelectedMikrotik('');
-      setSelectedPlan('');
+      setImportData({ mikrotik_id: '', plano_id: '', text: '' });
+      fetchData();
+      log.info('Passwords imported successfully', { count: newPasswords.length });
       
-      // Recarrega a lista de senhas
-      const { data, error } = await supabase.from('senhas').select('*');
-      if (!error) setPasswords(data || []);
-      
-    } catch (error) {
-      console.error('Erro na importação:', error);
-      alert(`Erro ao importar senhas: ${error.message}`);
+    } catch (err) {
+      log.error('Failed to import passwords', err);
+      setError(`Erro ao importar senhas: ${err.message}`);
     } finally {
       setImportLoading(false);
+      log.endTimer(timerId, 'import-passwords');
     }
   };
 
-  const handleEdit = (password: any) => {
-    setEditingPassword(password);
-    setShowEditModal(true);
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPassword) return;
+    
+    const timerId = log.startTimer('update-password');
+    
+    try {
+      log.info('Updating password', { id: editingPassword.id });
+      setLoading(true);
+      setError('');
+      
+      const supabaseAdmin = getSupabaseAdmin();
+      const { error } = await supabaseAdmin
+        .from('senhas')
+        .update({
+          usuario: editFormData.usuario,
+          senha: editFormData.senha,
+          disponivel: editFormData.disponivel
+        })
+        .eq('id', editingPassword.id);
+      
+      if (error) throw error;
+      
+      setSuccess('Senha atualizada com sucesso!');
+      setShowEditModal(false);
+      setEditingPassword(null);
+      setEditFormData({ usuario: '', senha: '', disponivel: true });
+      fetchData();
+      log.info('Password updated successfully');
+      
+    } catch (err) {
+      log.error('Failed to update password', err);
+      setError('Erro ao atualizar senha');
+    } finally {
+      setLoading(false);
+      log.endTimer(timerId, 'update-password');
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir esta senha?')) {
-      setLoading(true);
+  const handleDeletePassword = async (password: Password) => {
+    if (!window.confirm(`Tem certeza que deseja excluir a senha do usuário "${password.usuario}"?`)) {
+      return;
+    }
+    
+    const timerId = log.startTimer('delete-password');
+    
+    try {
+      log.info('Deleting password', { id: password.id });
+      
       const supabaseAdmin = getSupabaseAdmin();
-      const { error } = await supabaseAdmin.from('senhas').delete().eq('id', id);
-      if (error) {
-        console.error('Erro ao excluir senha:', error);
-        alert('Erro ao excluir senha. Tente novamente.');
-      } else {
-        setPasswords(passwords.filter(p => p.id !== id));
-      }
-      setLoading(false);
+      const { error } = await supabaseAdmin.from('senhas').delete().eq('id', password.id);
+      
+      if (error) throw error;
+      
+      setSuccess('Senha excluída com sucesso!');
+      fetchData();
+      log.info('Password deleted successfully');
+      
+    } catch (err) {
+      log.error('Failed to delete password', err);
+      setError('Erro ao excluir senha');
+    } finally {
+      log.endTimer(timerId, 'delete-password');
     }
   };
 
   const handleBulkDelete = async () => {
-    if (window.confirm(`Tem certeza que deseja excluir ${selectedPasswords.length} senhas?`)) {
-      setLoading(true);
+    if (!window.confirm(`Tem certeza que deseja excluir ${selectedPasswords.length} senhas?`)) {
+      return;
+    }
+    
+    const timerId = log.startTimer('bulk-delete-passwords');
+    
+    try {
+      log.info('Bulk deleting passwords', { count: selectedPasswords.length });
+      
       const supabaseAdmin = getSupabaseAdmin();
-      const { error } = await supabaseAdmin.from('senhas').delete().in('id', selectedPasswords);
-      if (error) {
-        console.error('Erro ao excluir senhas:', error);
-        alert('Erro ao excluir senhas. Tente novamente.');
-      } else {
-        setPasswords(passwords.filter(p => !selectedPasswords.includes(p.id)));
-        setSelectedPasswords([]);
-      }
-      setLoading(false);
+      const { error } = await supabaseAdmin
+        .from('senhas')
+        .delete()
+        .in('id', selectedPasswords);
+      
+      if (error) throw error;
+      
+      setSuccess(`${selectedPasswords.length} senhas excluídas com sucesso!`);
+      setSelectedPasswords([]);
+      fetchData();
+      log.info('Passwords bulk deleted successfully');
+      
+    } catch (err) {
+      log.error('Failed to bulk delete passwords', err);
+      setError('Erro ao excluir senhas');
+    } finally {
+      log.endTimer(timerId, 'bulk-delete-passwords');
     }
   };
 
   const filteredPasswords = passwords.filter(password => {
-    const matchesSearch = (password.usuario || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (planMap[password.plano_id]?.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (mikrotikMap[planMap[password.plano_id]?.mikrotik_id]?.nome || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || (password.vendida ? 'sold' : 'available') === statusFilter;
-    return matchesSearch && matchesStatus;
+    const plan = plans.find(p => p.id === password.plano_id);
+    const mikrotik = mikrotiks.find(m => m.id === plan?.mikrotik_id);
+    
+    const matchesSearch = 
+      password.usuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      password.senha.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      plan?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      mikrotik?.nome.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = 
+      statusFilter === 'all' || 
+      (statusFilter === 'available' && password.disponivel && !password.vendida) ||
+      (statusFilter === 'sold' && password.vendida) ||
+      (statusFilter === 'unavailable' && !password.disponivel);
+    
+    const matchesPlan = planFilter === 'all' || password.plano_id === planFilter;
+    
+    return matchesSearch && matchesStatus && matchesPlan;
   });
 
-  const availableCount = passwords.filter(p => p.disponivel && !p.vendida).length;
-  const soldCount = passwords.filter(p => p.vendida).length;
+  const stats = {
+    total: passwords.length,
+    available: passwords.filter(p => p.disponivel && !p.vendida).length,
+    sold: passwords.filter(p => p.vendida).length,
+    unavailable: passwords.filter(p => !p.disponivel).length
+  };
 
-  if (loading) {
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  const getPlanInfo = (planId: string) => {
+    const plan = plans.find(p => p.id === planId);
+    const mikrotik = plan ? mikrotiks.find(m => m.id === plan.mikrotik_id) : null;
+    return { plan, mikrotik };
+  };
+
+  const getStatusBadge = (password: Password) => {
+    if (password.vendida) {
+      return <Badge variant="secondary" className="bg-gray-100 text-gray-800">Vendida</Badge>;
+    } else if (password.disponivel) {
+      return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">Disponível</Badge>;
+    } else {
+      return <Badge variant="secondary" className="bg-red-100 text-red-800 border-red-200">Indisponível</Badge>;
+    }
+  };
+
+  if (loading && passwords.length === 0) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="loading-spinner h-12 w-12 mx-auto mb-4"></div>
-            <p className="text-gray-600 responsive-text">Carregando senhas...</p>
-          </div>
+      <div className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="responsive-title font-bold text-gray-900 flex items-center">
-            <Key className="w-6 h-6 sm:w-7 sm:h-7 mr-2 text-indigo-600" />
-            <span className="hidden sm:inline">Gerenciar Senhas</span>
-            <span className="sm:hidden">Senhas</span>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Key className="w-8 h-8 text-indigo-600" />
+            Gerenciamento de Senhas
           </h1>
-          <p className="text-gray-600 mt-1 responsive-text">Controle de senhas dos Mikrotiks</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="btn-primary flex items-center gap-2 touch-target"
-          >
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Importar</span>
-          </button>
-          {selectedPasswords.length > 0 && (
-            <button
-              onClick={handleBulkDelete}
-              className="btn-danger flex items-center gap-2 touch-target"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Excluir ({selectedPasswords.length})</span>
-              <span className="sm:hidden">{selectedPasswords.length}</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="stats-card">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <Key className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{passwords.length}</p>
-              <p className="text-sm text-gray-600">Total de Senhas</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="stats-card">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{availableCount}</p>
-              <p className="text-sm text-gray-600">Disponíveis</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="stats-card">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">{soldCount}</p>
-              <p className="text-sm text-gray-600">Vendidas</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="stats-card">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-orange-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-xl font-bold text-gray-900">R$ {totalReceita.toFixed(2)}</p>
-              <p className="text-sm text-gray-600">Receita Total</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="form-group">
-            <label className="form-label flex items-center gap-2">
-              <Search className="w-4 h-4" />
-              Buscar
-            </label>
-            <input
-              type="text"
-              placeholder="Digite usuário, senha ou mikrotik..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field"
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label flex items-center gap-2">
-              <Filter className="w-4 h-4" />
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="input-field"
-            >
-              <option value="all">Todos os status</option>
-              <option value="available">Disponível</option>
-              <option value="sold">Vendida</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Ações</label>
-            <div className="flex gap-2">
-              <button className="btn-secondary text-sm flex items-center gap-2">
-                <RefreshCw className="w-4 h-4" />
-                Atualizar
-              </button>
-              <button className="btn-secondary text-sm flex items-center gap-2">
-                <Download className="w-4 h-4" />
-                Exportar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Passwords Table */}
-      <div className="data-table">
-        <div className="table-header">
-          <h3 className="text-lg font-semibold text-gray-900">Lista de Senhas ({filteredPasswords.length})</h3>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              onChange={(e) => {
-                if (e.target.checked) {
-                  setSelectedPasswords(filteredPasswords.map(p => p.id));
-                } else {
-                  setSelectedPasswords([]);
-                }
-              }}
-              checked={selectedPasswords.length === filteredPasswords.length && filteredPasswords.length > 0}
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-600">Selecionar todos</span>
-          </div>
+          <p className="text-gray-600 mt-1">
+            Controle completo de senhas dos equipamentos
+          </p>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  <input
-                    type="checkbox"
-                    onChange={(e) => {
-                      if (e.target.checked) {
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" className="gap-2">
+            <Filter className="w-4 h-4" />
+            Filtros
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={fetchData}>
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2">
+            <Download className="w-4 h-4" />
+            Exportar
+          </Button>
+          {selectedPasswords.length > 0 && (
+            <Button variant="destructive" size="sm" className="gap-2" onClick={handleBulkDelete}>
+              <Trash2 className="w-4 h-4" />
+              Excluir ({selectedPasswords.length})
+            </Button>
+          )}
+          <Button 
+            onClick={() => setShowImportModal(true)}
+            className="gap-2 bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Upload className="w-4 h-4" />
+            Importar
+          </Button>
+        </div>
+      </div>
+
+      {/* Alert Messages */}
+      {error && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            {error}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800">
+            {success}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Total de Senhas
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.total}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <Key className="w-6 h-6 text-indigo-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Disponíveis
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.available}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+            <div className="flex items-center mt-4 gap-2">
+              <div className="flex items-center gap-1 text-green-600">
+                <span className="text-sm font-medium">
+                  {Math.round((stats.available / stats.total) * 100) || 0}% ativas
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Senhas Vendidas
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.sold}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Indisponíveis
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.unavailable}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <Shield className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search and Table */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle className="text-lg font-semibold">
+                Lista de Senhas
+              </CardTitle>
+              <CardDescription>
+                Gerencie todas as senhas do sistema
+              </CardDescription>
+            </div>
+            
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-80">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar senhas..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="available">Disponível</SelectItem>
+                  <SelectItem value="sold">Vendida</SelectItem>
+                  <SelectItem value="unavailable">Indisponível</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select value={planFilter} onValueChange={setPlanFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Plano" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os planos</SelectItem>
+                  {plans.map(plan => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-gray-100">
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedPasswords.length === filteredPasswords.length && filteredPasswords.length > 0}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
                         setSelectedPasswords(filteredPasswords.map(p => p.id));
                       } else {
                         setSelectedPasswords([]);
                       }
                     }}
-                    checked={selectedPasswords.length === filteredPasswords.length && filteredPasswords.length > 0}
-                    className="rounded border-gray-300"
                   />
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mikrotik/Plano</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Senha</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredPasswords.map((password) => (
-                <tr key={password.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <input
-                      type="checkbox"
-                      checked={selectedPasswords.includes(password.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPasswords([...selectedPasswords, password.id]);
-                        } else {
-                          setSelectedPasswords(selectedPasswords.filter(id => id !== password.id));
+                </TableHead>
+                <TableHead className="font-semibold">Equipamento/Plano</TableHead>
+                <TableHead className="font-semibold">Usuário</TableHead>
+                <TableHead className="font-semibold">Senha</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Data</TableHead>
+                <TableHead className="font-semibold">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredPasswords.map((password) => {
+                const { plan, mikrotik } = getPlanInfo(password.plano_id);
+                
+                return (
+                  <TableRow key={password.id} className="hover:bg-gray-50">
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedPasswords.includes(password.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedPasswords([...selectedPasswords, password.id]);
+                          } else {
+                            setSelectedPasswords(selectedPasswords.filter(id => id !== password.id));
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                          <Wifi className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{mikrotik?.nome || 'Desconhecido'}</p>
+                          <p className="text-sm text-gray-500">{plan?.nome || 'Plano não encontrado'}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <code className="bg-gray-100 px-2 py-1 rounded text-sm">
+                        {password.usuario}
+                      </code>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <code className="bg-gray-100 px-2 py-1 rounded text-sm">
+                        {password.senha}
+                      </code>
+                    </TableCell>
+                    
+                    <TableCell>
+                      {getStatusBadge(password)}
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Clock className="w-4 h-4" />
+                        {password.vendida_em ? 
+                          formatDate(password.vendida_em) : 
+                          formatDate(password.criada_em)
                         }
-                      }}
-                      className="rounded border-gray-300"
-                    />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{mikrotikMap[planMap[password.plano_id]?.mikrotik_id]?.nome || '-'}</p>
-                      <p className="text-sm text-gray-500">{planMap[password.plano_id]?.nome || '-'}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded text-gray-900">{password.usuario}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded text-gray-900">{password.senha}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      password.vendida 
-                        ? 'bg-gray-100 text-gray-800' 
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {password.vendida ? 'Vendida' : 'Disponível'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {password.vendida_em ? new Date(password.vendida_em).toLocaleDateString('pt-BR') : 
-                     password.criada_em ? new Date(password.criada_em).toLocaleDateString('pt-BR') : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(password)}
-                        className="text-blue-600 hover:text-blue-800 p-1"
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(password.id)}
-                        className="text-red-600 hover:text-red-800 p-1"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setEditingPassword(password);
+                              setEditFormData({
+                                usuario: password.usuario,
+                                senha: password.senha,
+                                disponivel: password.disponivel
+                              });
+                              setShowEditModal(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeletePassword(password)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          
+          {filteredPasswords.length === 0 && (
+            <div className="text-center py-12">
+              <Key className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">Nenhuma senha encontrada</p>
+              <p className="text-gray-400 text-sm mt-1">
+                {searchTerm || statusFilter !== 'all' || planFilter !== 'all' ? 
+                  'Tente ajustar seus filtros' : 
+                  'Clique em "Importar" para adicionar senhas'}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Upload className="w-6 h-6 text-blue-600" />
-                Importar Senhas
-              </h3>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="text-gray-400 hover:text-gray-600 text-xl"
-              >
-                ✕
-              </button>
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-indigo-600" />
+              Importar Senhas
+            </DialogTitle>
+            <DialogDescription>
+              Importe senhas para um plano específico
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="mikrotik">Selecionar Mikrotik</Label>
+                <Select 
+                  value={importData.mikrotik_id} 
+                  onValueChange={(value) => setImportData({ ...importData, mikrotik_id: value, plano_id: '' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um Mikrotik" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mikrotiks.map(mikrotik => (
+                      <SelectItem key={mikrotik.id} value={mikrotik.id}>
+                        {mikrotik.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="plano">Selecionar Plano</Label>
+                <Select 
+                  value={importData.plano_id} 
+                  onValueChange={(value) => setImportData({ ...importData, plano_id: value })}
+                  disabled={!importData.mikrotik_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um Plano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {plans
+                      .filter(plan => plan.mikrotik_id === importData.mikrotik_id)
+                      .map(plan => (
+                        <SelectItem key={plan.id} value={plan.id}>
+                          {plan.nome}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             
-            <div className="space-y-4">
-              <div className="form-group">
-                <label className="form-label">Selecionar Mikrotik</label>
-                <select
-                  value={selectedMikrotik}
-                  onChange={(e) => { setSelectedMikrotik(e.target.value); setSelectedPlan(''); }}
-                  className="input-field"
-                >
-                  <option value="">Selecione um Mikrotik</option>
-                  {mikrotiks.map((mikrotik) => (
-                    <option key={mikrotik.id} value={mikrotik.id}>
-                      {mikrotik.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Selecionar Plano</label>
-                <select
-                  value={selectedPlan}
-                  onChange={(e) => setSelectedPlan(e.target.value)}
-                  className="input-field"
-                  disabled={!selectedMikrotik}
-                >
-                  <option value="">Selecione um Plano</option>
-                  {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.nome} - R$ {plan.preco}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Dados das Senhas (uma por linha)</label>
-                <textarea
-                  value={importData}
-                  onChange={(e) => setImportData(e.target.value)}
-                  className="input-field min-h-[120px] resize-none"
-                  placeholder="usuario:senha&#10;usuario2:senha2&#10;usuario3:senha3"
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowImportModal(false)}
-                  className="flex-1 btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleImport}
-                  className="flex-1 btn-primary"
-                  disabled={!selectedMikrotik || !selectedPlan || !importData || importLoading}
-                >
-                  {importLoading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                      Importando...
-                    </>
-                  ) : (
-                    'Importar'
-                  )}
-                </button>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="passwords">Dados das Senhas</Label>
+              <Textarea
+                id="passwords"
+                rows={10}
+                value={importData.text}
+                onChange={(e) => setImportData({ ...importData, text: e.target.value })}
+                placeholder="usuario1:senha1&#10;usuario2:senha2&#10;usuario3:senha3"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-gray-500">
+                Cole as senhas no formato: <code>usuario:senha</code>, uma por linha
+              </p>
             </div>
           </div>
-        </div>
-      )}
+          
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setShowImportModal(false);
+                setImportData({ mikrotik_id: '', plano_id: '', text: '' });
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleImportPasswords}
+              disabled={importLoading || !importData.text.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              {importLoading ? 'Importando...' : 'Importar Senhas'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-blue-600" />
+              Editar Senha
+            </DialogTitle>
+            <DialogDescription>
+              Atualize as informações da senha
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleUpdatePassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="editUsuario">Usuário</Label>
+              <Input
+                id="editUsuario"
+                required
+                value={editFormData.usuario}
+                onChange={(e) => setEditFormData({ ...editFormData, usuario: e.target.value })}
+                placeholder="Nome do usuário"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="editSenha">Senha</Label>
+              <Input
+                id="editSenha"
+                required
+                value={editFormData.senha}
+                onChange={(e) => setEditFormData({ ...editFormData, senha: e.target.value })}
+                placeholder="Senha"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="disponivel"
+                checked={editFormData.disponivel}
+                onCheckedChange={(checked) => setEditFormData({ ...editFormData, disponivel: !!checked })}
+              />
+              <Label htmlFor="disponivel">Senha disponível para venda</Label>
+            </div>
+            
+            <DialogFooter className="gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingPassword(null);
+                  setEditFormData({ usuario: '', senha: '', disponivel: true });
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {loading ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
