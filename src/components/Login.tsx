@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, Mail, Shield, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { 
+  Eye, 
+  EyeOff, 
+  Lock, 
+  Mail, 
+  Shield, 
+  AlertCircle, 
+  CheckCircle, 
+  Loader2,
+  Sparkles,
+  Crown,
+  Zap,
+  ArrowRight,
+  WifiOff,
+  Globe
+} from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,7 +93,7 @@ const Login = ({ onLogin }: LoginProps) => {
       
       setTimeout(() => {
         onLogin(userId, userRole);
-      }, 500);
+      }, 800);
 
     } catch (error) {
       console.error('Erro no login:', error);
@@ -89,122 +104,192 @@ const Login = ({ onLogin }: LoginProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decorations */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-80 h-80 bg-gradient-to-r from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-gradient-to-r from-purple-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-blue-300/10 to-purple-300/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -left-40 w-80 h-80 bg-gradient-to-r from-blue-400/30 to-cyan-400/30 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-gradient-to-r from-purple-400/30 to-pink-400/30 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-indigo-300/20 to-purple-300/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+        
+        {/* Floating particles */}
+        <div className="absolute top-20 left-20 w-2 h-2 bg-blue-400 rounded-full animate-bounce opacity-60" style={{ animationDelay: '0s' }}></div>
+        <div className="absolute top-32 right-32 w-1 h-1 bg-purple-400 rounded-full animate-bounce opacity-40" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute bottom-20 left-32 w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce opacity-50" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute bottom-32 right-20 w-1 h-1 bg-pink-400 rounded-full animate-bounce opacity-30" style={{ animationDelay: '3s' }}></div>
       </div>
 
-      <div className="w-full max-w-md relative">
+      <div className="w-full max-w-md relative z-10">
         {/* Login Card */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 animate-scale-in">
-          {/* Header */}
-          <div className="text-center mb-8 animate-slide-in">
-            <div className="relative inline-block mb-4">
-              <div className="w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-lg mx-auto">
-                <div className="absolute inset-0 bg-white/20 rounded-2xl"></div>
-                <Shield className="w-8 h-8 text-white relative z-10" />
+        <div className="relative bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-8 transform hover:scale-105 transition-all duration-500">
+          {/* Glow effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-3xl blur-xl opacity-50"></div>
+          
+          {/* Content */}
+          <div className="relative z-10">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="relative inline-block mb-6">
+                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-3xl flex items-center justify-center shadow-2xl mx-auto transform transition-all duration-300 hover:rotate-6 hover:scale-110">
+                  <div className="absolute inset-0 bg-white/20 rounded-3xl"></div>
+                  <Shield className="w-10 h-10 text-white relative z-10 drop-shadow-lg" />
+                </div>
+                {/* Crown for admin */}
+                <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                  <Crown className="w-4 h-4 text-white" />
+                </div>
+                {/* Sparkles */}
+                <Sparkles className="absolute -top-1 -left-1 w-4 h-4 text-yellow-300 animate-pulse" />
+                <Sparkles className="absolute -bottom-1 -right-1 w-3 h-3 text-blue-300 animate-pulse" style={{ animationDelay: '1s' }} />
               </div>
-            </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-              PIX Mikro
-            </h1>
-            <p className="text-gray-600">
-              Sistema de Gerenciamento
-            </p>
-          </div>
-
-          {/* Error/Success Messages */}
-          {error && (
-            <Alert className="mb-4 border-red-200 bg-red-50 animate-bounce-in">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-700">{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert className="mb-4 border-green-200 bg-green-50 animate-bounce-in">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-700">{success}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email Field */}
-            <div className="form-group animate-slide-in" style={{ animationDelay: '0.1s' }}>
-              <Label htmlFor="email" className="form-label">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-field pl-11"
-                  placeholder="seu@email.com"
-                  disabled={isLoading}
-                  autoComplete="email"
-                  required
-                />
+              
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent mb-3">
+                PIX Mikro
+              </h1>
+              <p className="text-slate-300 text-lg font-medium mb-2">
+                Sistema de Gerenciamento
+              </p>
+              <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
+                <Zap className="w-4 h-4 text-yellow-400" />
+                <span>Powered by EasyPanel</span>
+                <Globe className="w-4 h-4 text-blue-400" />
               </div>
             </div>
 
-            {/* Password Field */}
-            <div className="form-group animate-slide-in" style={{ animationDelay: '0.2s' }}>
-              <Label htmlFor="password" className="form-label">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input-field pl-11 pr-11"
-                  placeholder="••••••••"
-                  disabled={isLoading}
-                  autoComplete="current-password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  disabled={isLoading}
+            {/* Error/Success Messages */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-2xl backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                    <AlertCircle className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-red-100 font-medium">{error}</p>
+                    {error.includes('servidor') && (
+                      <p className="text-red-200 text-sm mt-1 flex items-center gap-1">
+                        <WifiOff className="w-3 h-3" />
+                        Verifique as variáveis no EasyPanel
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-6 p-4 bg-green-500/20 border border-green-500/30 rounded-2xl backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <CheckCircle className="h-4 w-4 text-white" />
+                  </div>
+                  <p className="text-green-100 font-medium">{success}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Email Field */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-200 font-semibold flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  Email
+                </Label>
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="relative bg-white/10 border-white/20 text-white placeholder-slate-400 h-12 rounded-xl backdrop-blur-sm focus:bg-white/20 focus:border-blue-400/50 transition-all duration-300"
+                    placeholder="seu@email.com"
+                    disabled={isLoading}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Password Field */}
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-200 font-semibold flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  Senha
+                </Label>
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="relative bg-white/10 border-white/20 text-white placeholder-slate-400 h-12 rounded-xl backdrop-blur-sm focus:bg-white/20 focus:border-purple-400/50 transition-all duration-300 pr-12"
+                    placeholder="••••••••••"
+                    disabled={isLoading}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                    disabled={isLoading}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Login Button */}
+              <div className="pt-4">
+                <Button
+                  type="submit"
+                  className="w-full h-14 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 text-white font-bold text-lg rounded-xl shadow-2xl transform transition-all duration-300 hover:scale-105 hover:shadow-3xl relative overflow-hidden group"
+                  disabled={isLoading || !email || !password}
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+                  {/* Button glow effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                  
+                  {isLoading ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                      <span>Entrando...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-3 relative z-10">
+                      <Shield className="w-6 h-6" />
+                      <span>Entrar no Sistema</span>
+                      <ArrowRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform duration-300" />
+                    </div>
+                  )}
+                </Button>
               </div>
+            </form>
+
+            {/* Footer */}
+            <div className="mt-8 text-center space-y-3">
+              <div className="flex items-center justify-center gap-4 text-sm text-slate-400">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span>Sistema Online</span>
+                </div>
+                <div className="w-px h-4 bg-slate-600"></div>
+                <div className="flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-yellow-400" />
+                  <span>v2.1.0</span>
+                </div>
+              </div>
+              
+              <p className="text-xs text-slate-500">
+                Desenvolvido com 💜 para gestão profissional
+              </p>
             </div>
-
-            {/* Login Button */}
-            <Button
-              type="submit"
-              className="w-full btn-primary h-12 text-base font-semibold animate-slide-in"
-              style={{ animationDelay: '0.3s' }}
-              disabled={isLoading || !email || !password}
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Entrando...</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  <span>Entrar</span>
-                </div>
-              )}
-            </Button>
-          </form>
-
-          {/* Footer */}
-          <div className="mt-6 text-center text-xs text-gray-500 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-            <p>PIX Mikro CRM v2.1.0</p>
           </div>
         </div>
+
+        {/* Additional floating elements */}
+        <div className="absolute -top-10 -left-10 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-cyan-400/20 rounded-full blur-xl animate-pulse"></div>
+        <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-gradient-to-br from-purple-400/20 to-pink-400/20 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }}></div>
       </div>
     </div>
   );
