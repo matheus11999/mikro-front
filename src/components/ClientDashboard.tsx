@@ -1374,7 +1374,10 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-green-600 to-green-700">
-            <h2 className="text-xl font-bold text-white">Pix Mikro</h2>
+            <div>
+              <h2 className="text-xl font-bold text-white">{import.meta.env.VITE_APP_NAME || 'Pix Mikro'}</h2>
+              <p className="text-green-100 text-sm">{import.meta.env.VITE_APP_DESCRIPTION || 'Sistema de Vendas WiFi'}</p>
+            </div>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-2 rounded-md text-green-100 hover:text-white hover:bg-green-500/20"

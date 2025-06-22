@@ -554,7 +554,10 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-600 to-blue-700">
-            <h2 className="text-xl font-bold text-white">Pix Mikro</h2>
+            <div>
+              <h2 className="text-xl font-bold text-white">{import.meta.env.VITE_APP_NAME || 'Pix Mikro'}</h2>
+              <p className="text-blue-100 text-sm">{import.meta.env.VITE_APP_DESCRIPTION || 'Sistema de Vendas WiFi'}</p>
+            </div>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-2 rounded-md text-blue-100 hover:text-white hover:bg-blue-500/20"

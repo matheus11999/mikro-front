@@ -260,9 +260,53 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
   };
 
   const handleDeleteMikrotik = async (mikrotik: Mikrotik) => {
-    if (!confirm(`Tem certeza que deseja excluir o MikroTik "${mikrotik.nome}"?`)) return;
+    if (!confirm(`Tem certeza que deseja excluir o MikroTik "${mikrotik.nome}"?\n\nATENÇÃO: Todos os planos, senhas e dados relacionados também serão excluídos!`)) return;
     
     try {
+      setLoading(true);
+      setError('');
+      
+      // 1. Primeiro, buscar todos os planos deste MikroTik
+      const { data: planosData } = await supabase
+        .from('planos')
+        .select('id')
+        .eq('mikrotik_id', mikrotik.id);
+      
+      const planoIds = planosData?.map(p => p.id) || [];
+      
+      // 2. Deletar todas as senhas relacionadas aos planos deste MikroTik
+      if (planoIds.length > 0) {
+        const { error: senhasError } = await supabase
+          .from('senhas')
+          .delete()
+          .in('plano_id', planoIds);
+        
+        if (senhasError) {
+          console.warn('Erro ao deletar senhas:', senhasError);
+          // Continue mesmo se não conseguir deletar senhas
+        }
+      }
+      
+      // 3. Deletar todos os planos deste MikroTik
+      const { error: planosError } = await supabase
+        .from('planos')
+        .delete()
+        .eq('mikrotik_id', mikrotik.id);
+      
+      if (planosError) throw planosError;
+      
+      // 4. Deletar MACs relacionados
+      const { error: macsError } = await supabase
+        .from('macs')
+        .delete()
+        .eq('mikrotik_id', mikrotik.id);
+      
+      if (macsError) {
+        console.warn('Erro ao deletar MACs:', macsError);
+        // Continue mesmo se não conseguir deletar MACs
+      }
+      
+      // 5. Finalmente, deletar o MikroTik
       const { error } = await supabase
         .from('mikrotiks')
         .delete()
@@ -270,12 +314,14 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       
       if (error) throw error;
       
-      setSuccess('MikroTik excluído com sucesso!');
+      setSuccess('MikroTik e todos os dados relacionados foram excluídos com sucesso!');
       await fetchData();
       
     } catch (err: any) {
       console.error('Erro ao excluir mikrotik:', err);
-      setError('Erro ao excluir MikroTik');
+      setError(`Erro ao excluir MikroTik: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 

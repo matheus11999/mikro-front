@@ -84,8 +84,8 @@ export default function Login({ onLogin }: LoginProps) {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl mb-6 shadow-lg">
             <Wifi className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Pix Mikro</h1>
-          <p className="text-gray-600">Sistema de Vendas WiFi</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{import.meta.env.VITE_APP_NAME || 'Pix Mikro'}</h1>
+          <p className="text-gray-600">{import.meta.env.VITE_APP_DESCRIPTION || 'Sistema de Vendas WiFi'} {import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : ''}</p>
         </div>
 
         {/* Login Form */}
