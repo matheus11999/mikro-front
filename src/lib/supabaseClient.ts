@@ -2,8 +2,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Configurações das variáveis de ambiente (definidas no EasyPanel)
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_KEY;
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || import.meta.env.VITE_SUPABASE_SERVICE_ROLE;
 
 // Configurações adicionais
 const cacheDisabled = import.meta.env.VITE_CACHE === 'disabled';
@@ -30,17 +30,19 @@ if (debugMode) {
 if (!supabaseUrl || !supabaseAnonKey) {
   const missingVars = [];
   if (!supabaseUrl) missingVars.push('VITE_SUPABASE_URL');
-  if (!supabaseAnonKey) missingVars.push('VITE_SUPABASE_ANON_KEY');
+  if (!supabaseAnonKey) missingVars.push('VITE_SUPABASE_ANON_KEY ou VITE_SUPABASE_KEY');
   
   console.error('❌ Variáveis Supabase faltando:', missingVars);
   console.error('📋 Configure no EasyPanel as seguintes variáveis de ambiente:');
   console.error('   VITE_SUPABASE_URL=https://your-project.supabase.co');
-  console.error('   VITE_SUPABASE_ANON_KEY=your-anon-key');
-  console.error('   VITE_SUPABASE_SERVICE_ROLE=your-service-role-key (opcional)');
+  console.error('   VITE_SUPABASE_ANON_KEY=your-anon-key (ou VITE_SUPABASE_KEY)');
+  console.error('   VITE_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key (opcional)');
   console.error('📊 Status atual:', {
     VITE_SUPABASE_URL: !!supabaseUrl,
-    VITE_SUPABASE_ANON_KEY: !!supabaseAnonKey,
-    VITE_SUPABASE_SERVICE_ROLE: !!supabaseServiceRoleKey
+    VITE_SUPABASE_ANON_KEY: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+    VITE_SUPABASE_KEY: !!import.meta.env.VITE_SUPABASE_KEY,
+    VITE_SUPABASE_SERVICE_ROLE_KEY: !!import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
+    VITE_SUPABASE_SERVICE_ROLE: !!import.meta.env.VITE_SUPABASE_SERVICE_ROLE
   });
   
   const errorMessage = `❌ Configure as variáveis de ambiente no EasyPanel: ${missingVars.join(', ')}`;
