@@ -34,9 +34,9 @@ class ErrorBoundary extends Component<Props, State> {
       errorInfo
     });
 
-    // Log para debug
-    if (typeof window !== 'undefined' && (window as any).logger) {
-      (window as any).logger.error('ErrorBoundary', 'React Error Caught', {
+    // Log para debug em desenvolvimento
+    if (process.env.NODE_ENV === 'development') {
+      console.error('🔍 ErrorBoundary Details:', {
         error: error.message,
         stack: error.stack,
         componentStack: errorInfo.componentStack

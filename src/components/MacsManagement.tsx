@@ -39,7 +39,6 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabaseClient';
-import { useLogger } from '@/lib/logger';
 
 interface Mac {
   id: string;
@@ -49,7 +48,7 @@ interface Mac {
   ultimo_acesso: string;
   total_compras: number;
   total_gasto: number;
-  status: 'active' | 'inactive';
+  status: 'conectado' | 'desconectado' | 'coletado';
 }
 
 interface Mikrotik {
@@ -58,7 +57,6 @@ interface Mikrotik {
 }
 
 const MacsManagement = () => {
-  const log = useLogger('MacsManagement');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMikrotik, setSelectedMikrotik] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
@@ -70,34 +68,26 @@ const MacsManagement = () => {
   const [mikrotikMap, setMikrotikMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    log.mount();
     fetchData();
-    
-    return () => {
-      log.unmount();
-    };
   }, []);
 
   const fetchData = async () => {
-    const timerId = log.startTimer('fetch-data');
-    
     try {
-      log.info('Fetching MACs and mikrotiks data');
       setLoading(true);
       setError('');
       
       const [macsResult, mikrotiksResult] = await Promise.all([
         supabase.from('macs').select('*'),
-        supabase.from('mikrotiks').select('id, nome')
+        supabase.from('mikrotiks').select('id, nome').eq('status', 'Ativo')
       ]);
       
       if (macsResult.error) {
-        log.error('Failed to fetch MACs', macsResult.error);
+        console.error('Failed to fetch MACs', macsResult.error);
         throw macsResult.error;
       }
       
       if (mikrotiksResult.error) {
-        log.error('Failed to fetch mikrotiks', mikrotiksResult.error);
+        console.error('Failed to fetch mikrotiks', mikrotiksResult.error);
         throw mikrotiksResult.error;
       }
       
@@ -111,17 +101,11 @@ const MacsManagement = () => {
       });
       setMikrotikMap(map);
       
-      log.info('Data fetched successfully', { 
-        macs: macsResult.data?.length, 
-        mikrotiks: mikrotiksResult.data?.length 
-      });
-      
     } catch (err) {
-      log.error('Failed to fetch data', err);
+      console.error('Failed to fetch data', err);
       setError('Erro ao carregar dados');
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'fetch-data');
     }
   };
 
@@ -160,7 +144,17 @@ const MacsManagement = () => {
 
   const stats = {
     total: collectedMacs.length,
-    active: collectedMacs.filter(mac => mac.status === 'active').length,
+    conectados: collectedMacs.filter(mac => mac.status === 'conectado').length,
+    desconectados: collectedMacs.filter(mac => mac.status === 'desconectado').length,
+    novosHoje: (() => {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      return collectedMacs.filter(mac => {
+        const primeiroAcesso = new Date(mac.primeiro_acesso);
+        primeiroAcesso.setHours(0, 0, 0, 0);
+        return primeiroAcesso.getTime() === hoje.getTime();
+      }).length;
+    })(),
     totalPurchases: collectedMacs.reduce((sum, mac) => sum + (mac.total_compras || 0), 0),
     totalRevenue: collectedMacs.reduce((sum, mac) => sum + (Number(mac.total_gasto) || 0), 0),
     averageSpent: collectedMacs.length > 0 ? 
@@ -187,35 +181,50 @@ const MacsManagement = () => {
   };
 
   const getStatusBadge = (status: Mac['status']) => {
-    const isActive = status === 'active';
-    return (
-      <Badge 
-        variant={isActive ? 'default' : 'secondary'}
-        className={isActive ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}
-      >
-        {isActive ? 'Ativo' : 'Inativo'}
-      </Badge>
-    );
+    const isConnected = status === 'conectado';
+    const isDisconnected = status === 'desconectado';
+    const isCollected = status === 'coletado';
+    
+    if (isConnected) {
+      return (
+        <Badge className="bg-green-100 text-green-800 border-green-200">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          Conectado
+        </Badge>
+      );
+    } else if (isDisconnected) {
+      return (
+        <Badge className="bg-red-100 text-red-800 border-red-200">
+          <AlertCircle className="w-3 h-3 mr-1" />
+          Desconectado
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="secondary" className="bg-gray-100 text-gray-800 border-gray-200">
+          <Clock className="w-3 h-3 mr-1" />
+          Coletado
+        </Badge>
+      );
+    }
   };
 
   const getDateRangeText = () => {
     switch (dateFilter) {
       case 'today': return 'Hoje';
-      case 'week': return 'Esta Semana';
-      case 'month': return 'Este Mês';
-      case 'all': return 'Todos os Períodos';
-      default: return 'Todos os Períodos';
+      case 'week': return 'Últimos 7 dias';
+      case 'month': return 'Último mês';
+      default: return 'Todos os períodos';
     }
   };
 
   const handleExport = () => {
     setSuccess('Funcionalidade de exportação será implementada em breve');
-    log.info('Export requested');
   };
 
   if (loading && collectedMacs.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i} className="animate-pulse">
@@ -231,7 +240,7 @@ const MacsManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -279,91 +288,59 @@ const MacsManagement = () => {
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Total de MACs
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.total}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <Wifi className="w-6 h-6 text-indigo-600" />
-              </div>
-            </div>
+      {/* Enhanced Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de MACs</CardTitle>
+            <Wifi className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">
+              Dispositivos registrados
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  MACs Ativos
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.active}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <Activity className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-            <div className="flex items-center mt-4 gap-2">
-              <div className="flex items-center gap-1 text-green-600">
-                <span className="text-sm font-medium">
-                  {Math.round((stats.active / stats.total) * 100) || 0}% ativos
-                </span>
-              </div>
-            </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MACs Conectados</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.conectados}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.total > 0 ? ((stats.conectados / stats.total) * 100).toFixed(1) : 0}% do total
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Total de Compras
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalPurchases}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <ShoppingCart className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Novos MACs Hoje</CardTitle>
+            <Activity className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{stats.novosHoje}</div>
+            <p className="text-xs text-muted-foreground">
+              Primeiro acesso hoje
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Receita Total
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(stats.totalRevenue)}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-orange-600" />
-              </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revenue Total</CardTitle>
+            <DollarSign className="h-4 w-4 text-emerald-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-600">
+              {formatCurrency(stats.totalRevenue)}
             </div>
-            <div className="flex items-center mt-4 gap-2">
-              <div className="flex items-center gap-1 text-orange-600">
-                <span className="text-sm font-medium">
-                  {formatCurrency(stats.averageSpent)} médio
-                </span>
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {stats.totalPurchases} compras realizadas
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -408,7 +385,7 @@ const MacsManagement = () => {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="period">Período</Label>
+              <Label htmlFor="dateFilter">Período de Acesso</Label>
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o período" />
@@ -416,8 +393,8 @@ const MacsManagement = () => {
                 <SelectContent>
                   <SelectItem value="all">Todos os períodos</SelectItem>
                   <SelectItem value="today">Hoje</SelectItem>
-                  <SelectItem value="week">Esta semana</SelectItem>
-                  <SelectItem value="month">Este mês</SelectItem>
+                  <SelectItem value="week">Últimos 7 dias</SelectItem>
+                  <SelectItem value="month">Último mês</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -427,76 +404,73 @@ const MacsManagement = () => {
 
       {/* MACs Table */}
       <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <Wifi className="w-5 h-5" />
-            Dispositivos Coletados ({filteredMacs.length})
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">
+            Dispositivos MAC Coletados ({filteredMacs.length})
           </CardTitle>
           <CardDescription>
-            Lista completa de dispositivos que acessaram o portal captivo
+            Lista de dispositivos que acessaram o portal captivo
           </CardDescription>
         </CardHeader>
-        
-        <CardContent className="p-0">
+        <CardContent>
           <Table>
             <TableHeader>
-              <TableRow className="border-gray-100">
-                <TableHead className="font-semibold">MAC Address</TableHead>
-                <TableHead className="font-semibold">Mikrotik</TableHead>
-                <TableHead className="font-semibold">Compras</TableHead>
-                <TableHead className="font-semibold">Total Gasto</TableHead>
-                <TableHead className="font-semibold">Último Acesso</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
+              <TableRow>
+                <TableHead>MAC Address</TableHead>
+                <TableHead>Mikrotik</TableHead>
+                <TableHead>Primeiro Acesso</TableHead>
+                <TableHead>Último Acesso</TableHead>
+                <TableHead>Compras</TableHead>
+                <TableHead>Total Gasto</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredMacs.map((mac) => (
-                <TableRow key={mac.id} className="hover:bg-gray-50">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                        <Wifi className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-mono font-bold text-gray-900">{mac.mac_address}</p>
-                        <div className="flex items-center gap-1 text-xs text-gray-500">
-                          <Clock className="w-3 h-3" />
-                          Primeiro: {formatDate(mac.primeiro_acesso)}
-                        </div>
-                      </div>
+                <TableRow key={mac.id}>
+                  <TableCell className="font-mono">
+                    <div className="flex items-center gap-2">
+                      <Wifi className="w-4 h-4 text-indigo-600" />
+                      {mac.mac_address}
                     </div>
                   </TableCell>
                   
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Router className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <span className="font-medium text-gray-900">
-                        {mikrotikMap[mac.mikrotik_id] || 'N/A'}
+                      <Router className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">
+                        {mikrotikMap[mac.mikrotik_id] || 'Desconhecido'}
                       </span>
                     </div>
                   </TableCell>
                   
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-purple-500" />
-                      <span className="font-bold text-gray-900">
-                        {mac.total_compras || 0}
-                      </span>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <span className="font-bold text-green-600">
-                      {formatCurrency(Number(mac.total_gasto || 0))}
-                    </span>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Calendar className="w-4 h-4" />
+                      {formatDate(mac.primeiro_acesso)}
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="w-4 h-4" />
                       {formatDate(mac.ultimo_acesso)}
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-purple-600" />
+                      <span className="font-medium">{mac.total_compras || 0}</span>
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-green-600" />
+                      <span className="font-semibold text-green-600">
+                        {formatCurrency(Number(mac.total_gasto) || 0)}
+                      </span>
                     </div>
                   </TableCell>
                   
@@ -513,9 +487,10 @@ const MacsManagement = () => {
               <Wifi className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500 font-medium">Nenhum dispositivo encontrado</p>
               <p className="text-gray-400 text-sm mt-1">
-                {searchTerm || selectedMikrotik !== 'all' || dateFilter !== 'all' ? 
-                  'Tente ajustar seus filtros' : 
-                  'Nenhum dispositivo acessou o portal ainda'}
+                {searchTerm || selectedMikrotik !== 'all' || dateFilter !== 'all' 
+                  ? 'Tente ajustar os filtros de busca' 
+                  : 'Dispositivos aparecerão aqui conforme acessarem o portal'
+                }
               </p>
             </div>
           )}
@@ -526,3 +501,4 @@ const MacsManagement = () => {
 };
 
 export default MacsManagement;
+

@@ -1,354 +1,664 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Key, DollarSign, BarChart3, TrendingUp, Calendar, Download, RefreshCw, Wallet, Radio, Users, Smartphone, Monitor, Laptop, Tablet, Wifi } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  CreditCard, 
+  BarChart3, 
+  LogOut,
+  Menu,
+  X,
+  DollarSign,
+  TrendingUp,
+  UserCheck,
+  RefreshCw,
+  Activity,
+  Clock,
+  CheckCircle,
+  Router,
+  Wifi,
+  Calendar,
+  Plus,
+  Edit,
+  Trash2
+} from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
+import ClientWithdrawals from './ClientWithdrawals';
 
-interface Cliente {
+interface User {
   id: string;
-  nome: string;
   email: string;
+  role: 'admin' | 'user';
+  name?: string;
+}
+
+interface ClientDashboardProps {
+  user: User;
+  onLogout: () => Promise<void>;
+}
+
+interface ClientStats {
   saldo: number;
-  role: string;
-  whatsapp?: string;
-  chave_pix?: string;
+  totalVendas: number;
+  receitaTotal: number;
+  mikrotiksAtivos: number;
+  macsOnline: number;
+  totalMacs: number;
+  // Lucro do cliente por período
+  lucroHoje: number;
+  lucroSemana: number;
+  lucroMes: number;
 }
 
-interface Mikrotik {
-  id: string;
-  nome: string;
-  provider_name?: string;
-  status?: string;
-  cliente_id: string;
-  profitpercentage: number;
-}
-
-interface Plano {
-  id: string;
-  nome: string;
-  preco: number;
-  mikrotik_id: string;
-  duracao: number;
-}
-
-interface Senha {
-  id: string;
-  plano_id: string;
-  disponivel: boolean;
-  vendida: boolean;
-  usuario?: string;
-  senha?: string;
-  vendida_em?: string;
-}
-
-interface Venda {
-  id: string;
-  cliente_id: string;
-  mikrotik_id: string;
-  plano_id: string;
-  senha_id?: string;
-  valor: number;
-  lucro: number;
-  status: string;
-  data: string;
-  preco: number;
-  descricao?: string;
-  planos?: { nome: string };
-  mikrotiks?: { nome: string; profitpercentage: number };
-  macs?: { mac_address: string };
-}
-
-interface MikrotikWithPlans extends Mikrotik {
-  planos: Array<Plano & {
-    senhas: Senha[];
-    available: number;
-    sold: number;
-    totalPasswords: number;
-    revenue: number;
-  }>;
-}
-
-interface DashboardStats {
-  totalSenhasDisponiveis: number;
-  vendasMesAtual: number;
-  receitaDiaAtual: number;
-  totalReceita: number;
-}
-
-const ClientDashboard = () => {
-  const [showPasswords, setShowPasswords] = useState(false);
-  const [clientData, setClientData] = useState<Cliente | null>(null);
-  const [userMikrotiks, setUserMikrotiks] = useState<MikrotikWithPlans[]>([]);
-  const [salesHistory, setSalesHistory] = useState<Venda[]>([]);
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
-    totalSenhasDisponiveis: 0,
-    vendasMesAtual: 0,
-    receitaDiaAtual: 0,
-    totalReceita: 0
+// Dashboard principal do cliente
+function DashboardContent() {
+  const [stats, setStats] = useState<ClientStats>({
+    saldo: 0,
+    totalVendas: 0,
+    receitaTotal: 0,
+    mikrotiksAtivos: 0,
+    macsOnline: 0,
+    totalMacs: 0,
+    lucroHoje: 0,
+    lucroSemana: 0,
+    lucroMes: 0
   });
   const [loading, setLoading] = useState(true);
-  
+  const [recentSales, setRecentSales] = useState<any[]>([]);
+
   useEffect(() => {
-    async function fetchAll() {
-      setLoading(true);
-      try {
-        // Buscar o cliente logado
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error('Usuário não autenticado');
-          setLoading(false);
-          return;
-        }
-
-        const { data: clientes, error: clienteError } = await supabase
-          .from('clientes')
-          .select('*')
-          .eq('email', user.email)
-          .limit(1);
-
-        if (clienteError) {
-          console.error('Erro ao buscar cliente:', clienteError);
-          setLoading(false);
-          return;
-        }
-
-        if (!clientes || clientes.length === 0) {
-          console.error('Cliente não encontrado');
-          setLoading(false);
-          return;
-        }
-
-        const cliente = clientes[0] as Cliente;
-        setClientData(cliente);
-
-        // Buscar mikrotiks do cliente
-        const { data: mikrotiks, error: mikrotiksError } = await supabase
-          .from('mikrotiks')
-          .select('*')
-          .eq('cliente_id', cliente.id);
-
-        if (mikrotiksError) {
-          console.error('Erro ao buscar mikrotiks:', mikrotiksError);
-          setUserMikrotiks([]);
-        } else {
-          const mikrotiksWithPlans: MikrotikWithPlans[] = [];
-          
-          // Para cada mikrotik, buscar seus planos e senhas
-          for (const mikrotik of (mikrotiks as Mikrotik[]) || []) {
-            const { data: planos, error: planosError } = await supabase
-              .from('planos')
-              .select('*')
-              .eq('mikrotik_id', mikrotik.id);
-
-            if (planosError) {
-              console.error('Erro ao buscar planos:', planosError);
-              continue;
-            }
-
-            const planosWithSenhas = [];
-            for (const plano of (planos as Plano[]) || []) {
-              const { data: senhas, error: senhasError } = await supabase
-                .from('senhas')
-                .select('*')
-                .eq('plano_id', plano.id);
-
-              if (senhasError) {
-                console.error('Erro ao buscar senhas:', senhasError);
-                continue;
-              }
-
-              const senhasArray = (senhas as Senha[]) || [];
-              const available = senhasArray.filter(s => s.disponivel && !s.vendida).length;
-              const sold = senhasArray.filter(s => s.vendida).length;
-              const totalPasswords = senhasArray.length;
-
-              // Calcular receita deste plano (usar campo valor)
-              const { data: vendasPlano } = await supabase
-                .from('vendas')
-                .select('valor')
-                .eq('plano_id', plano.id)
-                .eq('status', 'aprovado');
-
-              const revenue = (vendasPlano || []).reduce((acc, venda) => acc + (Number(venda.valor || 0)), 0);
-
-              planosWithSenhas.push({
-                ...plano,
-                senhas: senhasArray,
-                available,
-                sold,
-                totalPasswords,
-                revenue
-              });
-            }
-
-            mikrotiksWithPlans.push({
-              ...mikrotik,
-              planos: planosWithSenhas
-            });
-          }
-
-          setUserMikrotiks(mikrotiksWithPlans);
-        }
-
-        // Calcular estatísticas do dashboard
-        await calculateDashboardStats(cliente.id);
-
-        // Buscar vendas do cliente (histórico) com informações do MAC
-        const mikrotikIds = (mikrotiks as Mikrotik[])?.map(m => m.id) || [];
-        
-        if (mikrotikIds.length > 0) {
-          const { data: vendas, error: vendasError } = await supabase
-            .from('vendas')
-            .select(`
-              *,
-              planos!inner(nome),
-              mikrotiks!inner(nome, profitpercentage),
-              macs(mac_address)
-            `)
-            .in('mikrotik_id', mikrotikIds)
-            .eq('status', 'aprovado')
-            .order('data', { ascending: false })
-            .limit(20);
-
-          if (vendasError) {
-            console.error('Erro ao buscar vendas:', vendasError);
-            setSalesHistory([]);
-          } else {
-            setSalesHistory((vendas as Venda[]) || []);
-          }
-        } else {
-          setSalesHistory([]);
-        }
-
-      } catch (error) {
-        console.error('Erro geral:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchAll();
+    loadClientData();
   }, []);
 
-  // Função para calcular estatísticas do dashboard
-  const calculateDashboardStats = async (clienteId: string) => {
+  const loadClientData = async () => {
     try {
-      // Buscar mikrotiks do cliente
-      const { data: mikrotiks } = await supabase
-        .from('mikrotiks')
-        .select('id')
-        .eq('cliente_id', clienteId);
+      setLoading(true);
 
-      if (!mikrotiks || mikrotiks.length === 0) {
+      // Buscar dados do usuário atual
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      console.log('DEBUG - User ID:', authUser.id);
+
+      // Primeiro tentar buscar cliente por ID, se não encontrar, buscar por email
+      let clienteRes = await supabase.from('clientes').select('*').eq('id', authUser.id).maybeSingle();
+      
+      if (!clienteRes.data) {
+        console.log('DEBUG - Cliente não encontrado por ID, buscando por email:', authUser.email);
+        clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
+      }
+
+      const cliente = clienteRes.data;
+      if (!cliente) {
+        console.error('Cliente não encontrado para o usuário:', authUser.email);
         return;
       }
 
-      const mikrotikIds = mikrotiks.map(m => m.id);
+      console.log('DEBUG - Cliente encontrado:', cliente);
 
-      // 1. Total de senhas disponíveis
-      const { data: senhasDisponiveis } = await supabase
-        .from('senhas')
-        .select(`
-          id,
-          planos!inner(mikrotik_id)
-        `)
-        .eq('disponivel', true)
-        .eq('vendida', false)
-        .in('planos.mikrotik_id', mikrotikIds);
+      // Carregar dados usando o ID do cliente encontrado
+      const clienteId = cliente.id;
 
-      const totalSenhasDisponiveis = senhasDisponiveis?.length || 0;
+      // Datas para cálculos
+      const agora = new Date();
+      const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+      
+      // Corrigir início da semana para segunda-feira
+      const inicioSemana = new Date(agora);
+      const diaDaSemana = agora.getDay(); // 0 = domingo, 1 = segunda, etc.
+      const diasParaSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1; // Se domingo, volta 6 dias; senão volta (dia - 1)
+      inicioSemana.setDate(agora.getDate() - diasParaSegunda);
+      inicioSemana.setHours(0, 0, 0, 0);
+      
+      const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
-      // 2. Vendas do mês atual - buscar por mikrotik_id
-      const hoje = new Date();
-      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+      const [
+        mikrotiksRes,
+        vendasTodasRes,
+        vendasHojeRes,
+        vendasSemanaRes,
+        vendasMesRes,
+        macsRes,
+        recentVendasRes
+      ] = await Promise.all([
+        supabase.from('mikrotiks').select('id, nome, status').eq('cliente_id', clienteId).eq('status', 'Ativo'),
+        supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado'),
+        supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
+        supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
+        supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioMes.toISOString()),
+        supabase.from('macs').select('id, mikrotik_id, status'),
+        supabase.from('vendas').select('*, mikrotiks(nome), planos(nome)').eq('status', 'aprovado').order('data', { ascending: false }).limit(10)
+      ]);
 
-      const { data: vendasMes } = await supabase
-        .from('vendas')
-        .select('id')
-        .in('mikrotik_id', mikrotikIds)
-        .eq('status', 'aprovado')
-        .gte('data', inicioMes.toISOString())
-        .lte('data', fimMes.toISOString());
+      const saldo = parseFloat(cliente.saldo || '0');
+      const mikrotiks = mikrotiksRes.data || [];
+      const allVendasTodas = vendasTodasRes.data || [];
+      const allVendasHoje = vendasHojeRes.data || [];
+      const allVendasSemana = vendasSemanaRes.data || [];
+      const allVendasMes = vendasMesRes.data || [];
+      const allMacs = macsRes.data || [];
+      const allRecentVendas = recentVendasRes.data || [];
 
-      const vendasMesAtual = vendasMes?.length || 0;
+      // Filtrar dados do usuário logado
+      const userMikrotikIds = mikrotiks.map(m => m.id);
+      
+      const userVendasTodas = allVendasTodas.filter(venda => 
+        userMikrotikIds.includes(venda.mikrotik_id)
+      );
+      
+      const userVendasHoje = allVendasHoje.filter(venda => 
+        userMikrotikIds.includes(venda.mikrotik_id)
+      );
+      
+      const userVendasSemana = allVendasSemana.filter(venda => 
+        userMikrotikIds.includes(venda.mikrotik_id)
+      );
+      
+      const userVendasMes = allVendasMes.filter(venda => 
+        userMikrotikIds.includes(venda.mikrotik_id)
+      );
+      
+      const userMacs = allMacs.filter(mac => 
+        userMikrotikIds.includes(mac.mikrotik_id)
+      );
+      
+      const userRecentVendas = allRecentVendas.filter(venda => 
+        userMikrotikIds.includes(venda.mikrotik_id)
+      );
 
-      // 3. Receita do dia atual - usar campo valor que contém a parte do cliente
-      const inicioDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-      const fimDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000 - 1);
+      console.log('DEBUG - User MikroTiks:', mikrotiks);
+      console.log('DEBUG - User MikroTik IDs:', userMikrotikIds);
+      console.log('DEBUG - User vendas todas:', userVendasTodas.length);
+      console.log('DEBUG - User vendas hoje:', userVendasHoje.length);
+      console.log('DEBUG - User vendas semana:', userVendasSemana.length);
+      console.log('DEBUG - User vendas mês:', userVendasMes.length);
 
-      const { data: vendasDia } = await supabase
-        .from('vendas')
-        .select('valor')
-        .in('mikrotik_id', mikrotikIds)
-        .eq('status', 'aprovado')
-        .gte('data', inicioDia.toISOString())
-        .lte('data', fimDia.toISOString());
+      // Calcular receita total e lucros por período (valor = parte do cliente)
+      const receitaTotal = userVendasTodas.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
+      const lucroHoje = userVendasHoje.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
+      const lucroSemana = userVendasSemana.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
+      const lucroMes = userVendasMes.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
+      
+      const totalMacs = userMacs.length;
+      const macsConectados = userMacs.filter(mac => mac.status === 'conectado').length;
 
-      const receitaDiaAtual = (vendasDia || []).reduce((acc, venda) => acc + (Number(venda.valor || 0)), 0);
-
-      // 4. Total de receita geral - usar campo valor que contém a parte do cliente
-      const { data: todasVendas } = await supabase
-        .from('vendas')
-        .select('valor')
-        .in('mikrotik_id', mikrotikIds)
-        .eq('status', 'aprovado');
-
-      const totalReceita = (todasVendas || []).reduce((acc, venda) => acc + (Number(venda.valor || 0)), 0);
-
-      setDashboardStats({
-        totalSenhasDisponiveis,
-        vendasMesAtual,
-        receitaDiaAtual,
-        totalReceita
+      setStats({
+        saldo: saldo,
+        totalVendas: userVendasTodas.length,
+        receitaTotal: receitaTotal,
+        mikrotiksAtivos: mikrotiks.length,
+        macsOnline: macsConectados,
+        totalMacs: totalMacs,
+        lucroHoje: lucroHoje,
+        lucroSemana: lucroSemana,
+        lucroMes: lucroMes
       });
 
+      setRecentSales(userRecentVendas);
+
     } catch (error) {
-      console.error('Erro ao calcular estatísticas:', error);
+      console.error('Erro ao carregar dados do cliente:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Calcular totais para os mikrotiks
-  const totalPasswords = userMikrotiks.reduce((acc, mikrotik) => {
-    if (!mikrotik.planos || !Array.isArray(mikrotik.planos)) return acc;
-    return acc + mikrotik.planos.reduce((planAcc, plan) => planAcc + (plan.totalPasswords || 0), 0);
-  }, 0);
-  
-  const totalAvailable = userMikrotiks.reduce((acc, mikrotik) => {
-    if (!mikrotik.planos || !Array.isArray(mikrotik.planos)) return acc;
-    return acc + mikrotik.planos.reduce((planAcc, plan) => planAcc + (plan.available || 0), 0);
-  }, 0);
-  
-  const totalSold = userMikrotiks.reduce((acc, mikrotik) => {
-    if (!mikrotik.planos || !Array.isArray(mikrotik.planos)) return acc;
-    return acc + mikrotik.planos.reduce((planAcc, plan) => planAcc + (plan.sold || 0), 0);
-  }, 0);
-
-  const monthlyStats = [
-    { month: 'Jan', sales: 28, revenue: 420.50 },
-    { month: 'Dez', sales: 35, revenue: 525.75 },
-    { month: 'Nov', sales: 22, revenue: 330.25 },
-    { month: 'Out', sales: 31, revenue: 465.30 }
-  ];
-
   if (loading) {
     return (
-      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 text-sm md:text-base">Carregando dashboard...</p>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-48"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-gray-200 rounded-lg h-32"></div>
+            ))}
           </div>
+          <div className="bg-gray-200 rounded-lg h-64"></div>
         </div>
       </div>
     );
   }
 
-  if (!clientData) {
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'rejected':
+        return <X className="w-4 h-4 text-red-600" />;
+      default:
+        return <Clock className="w-4 h-4 text-yellow-600" />;
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'Aprovado';
+      case 'rejected':
+        return 'Rejeitado';
+      default:
+        return 'Pendente';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'text-green-600 bg-green-50';
+      case 'rejected':
+        return 'text-red-600 bg-red-50';
+      default:
+        return 'text-yellow-600 bg-yellow-50';
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-gray-900">Meu Dashboard</h1>
+        <button
+          onClick={loadClientData}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </button>
+      </div>
+
+      {/* Cards de estatísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Saldo Disponível</p>
+              <p className="text-2xl font-bold text-green-600">
+                R$ {stats.saldo.toFixed(2)}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Disponível para saque
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total de Vendas</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.totalVendas}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Vendas aprovadas
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Receita Total</p>
+              <p className="text-2xl font-bold text-green-600">R$ {stats.receitaTotal.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                De todas as vendas
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">MikroTiks Ativos</p>
+              <p className="text-2xl font-bold text-purple-600">{stats.mikrotiksAtivos}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Equipamentos online
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Router className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Segunda linha de cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">MACs Conectados</p>
+              <p className="text-2xl font-bold text-cyan-600">
+                {stats.macsOnline} / {stats.totalMacs}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {stats.totalMacs > 0 ? ((stats.macsOnline / stats.totalMacs) * 100).toFixed(1) : 0}% online
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
+              <Wifi className="w-6 h-6 text-cyan-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Lucro Hoje</p>
+              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroHoje.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Receita do dia
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Lucro Semana</p>
+              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroSemana.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Receita da semana
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Lucro Mês</p>
+              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroMes.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Receita do mês
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Vendas recentes */}
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas Recentes</h3>
+          <div className="space-y-3">
+            {recentSales.length > 0 ? (
+              recentSales.map((sale, index) => (
+                <div key={sale.id || index} className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        R$ {parseFloat(sale.preco || '0').toFixed(2)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(sale.data).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                      <p className="text-xs text-blue-600 font-medium">
+                        {sale.mikrotiks?.nome || 'MikroTik'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-2 py-1 rounded-full text-xs font-medium text-green-600 bg-green-100">
+                      Aprovado
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {sale.planos?.nome || 'Plano'}
+                    </p>
+                    {sale.lucro && (
+                      <p className="text-xs text-green-600 font-medium mt-1">
+                        Lucro: R$ {parseFloat(sale.lucro).toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhuma venda realizada ainda</p>
+                <p className="text-sm">As vendas aparecerão aqui quando aprovadas</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Ações rápidas */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Link
+            to="/client/withdrawals"
+            className="flex items-center justify-center p-4 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
+          >
+            <CreditCard className="w-5 h-5 text-blue-600 mr-3" />
+            <span className="font-medium text-blue-700">Solicitar Saque</span>
+          </Link>
+          <Link
+            to="/client/mikrotiks"
+            className="flex items-center justify-center p-4 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors"
+          >
+            <Router className="w-5 h-5 text-purple-600 mr-3" />
+            <span className="font-medium text-purple-700">Gerenciar MikroTiks</span>
+          </Link>
+          <Link
+            to="/client/reports"
+            className="flex items-center justify-center p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+          >
+            <BarChart3 className="w-5 h-5 text-gray-600 mr-3" />
+            <span className="font-medium text-gray-700">Ver Relatórios</span>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Componente para gerenciar MikroTiks do cliente
+function ClientMikrotiks() {
+  const [mikrotiks, setMikrotiks] = useState<any[]>([]);
+  const [planos, setPlanos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingMikrotik, setEditingMikrotik] = useState<any>(null);
+  const [editingPlano, setEditingPlano] = useState<any>(null);
+  const [showPlanoModal, setShowPlanoModal] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      // Primeiro buscar o cliente para obter o ID correto
+      let clienteRes = await supabase.from('clientes').select('id').eq('id', authUser.id).maybeSingle();
+      
+      if (!clienteRes.data) {
+        console.log('DEBUG - Cliente não encontrado por ID, buscando por email:', authUser.email);
+        clienteRes = await supabase.from('clientes').select('id').eq('email', authUser.email).maybeSingle();
+      }
+
+      const cliente = clienteRes.data;
+      if (!cliente) {
+        console.error('Cliente não encontrado para o usuário:', authUser.email);
+        return;
+      }
+
+      const clienteId = cliente.id;
+
+      // Buscar os mikrotiks do usuário com informações detalhadas
+      const mikrotiksRes = await supabase
+        .from('mikrotiks')
+        .select('*, planos(id, nome, preco, duracao)')
+        .eq('cliente_id', clienteId)
+        .order('criado_em', { ascending: false });
+
+      const mikrotiks = mikrotiksRes.data || [];
+      
+      // Buscar todos os planos dos mikrotiks do usuário
+      const mikrotiksIds = mikrotiks.map(m => m.id);
+      const planosRes = mikrotiksIds.length > 0 
+        ? await supabase
+            .from('planos')
+            .select('*, mikrotiks(nome)')
+            .in('mikrotik_id', mikrotiksIds)
+            .order('criado_em', { ascending: false })
+        : { data: [] };
+
+      console.log('DEBUG - Cliente ID usado:', clienteId);
+      console.log('DEBUG - MikroTiks:', mikrotiks);
+      console.log('DEBUG - Planos:', planosRes.data);
+
+      setMikrotiks(mikrotiks);
+      setPlanos(planosRes.data || []);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateMikrotikName = async (id: string, newName: string) => {
+    try {
+      const { error } = await supabase
+        .from('mikrotiks')
+        .update({ nome: newName })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      setMikrotiks(prev => prev.map(m => m.id === id ? { ...m, nome: newName } : m));
+      setEditingMikrotik(null);
+    } catch (error) {
+      console.error('Erro ao atualizar nome:', error);
+    }
+  };
+
+  // Função para converter tempo para minutos
+  const convertToMinutes = (value: number, unit: string): number => {
+    switch (unit) {
+      case 'dias':
+        return value * 24 * 60;
+      case 'horas':
+        return value * 60;
+      case 'minutos':
+      default:
+        return value;
+    }
+  };
+
+  // Função para converter minutos para a unidade apropriada para exibição
+  const convertFromMinutes = (minutes: number): { value: number; unit: string } => {
+    if (minutes >= 1440 && minutes % 1440 === 0) {
+      return { value: minutes / 1440, unit: 'dias' };
+    } else if (minutes >= 60 && minutes % 60 === 0) {
+      return { value: minutes / 60, unit: 'horas' };
+    } else {
+      return { value: minutes, unit: 'minutos' };
+    }
+  };
+
+  const savePlano = async (plano: any) => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      // Converter duração para minutos baseado na unidade selecionada
+      const duracaoEmMinutos = convertToMinutes(
+        parseInt(plano.duracao), 
+        plano.unidadeTempo || 'minutos'
+      );
+
+      if (plano.id) {
+        // Atualizar plano existente
+        const { error } = await supabase
+          .from('planos')
+          .update({
+            nome: plano.nome,
+            preco: parseFloat(plano.preco),
+            duracao: duracaoEmMinutos
+          })
+          .eq('id', plano.id);
+
+        if (error) throw error;
+      } else {
+        // Criar novo plano
+        const { error } = await supabase
+          .from('planos')
+          .insert({
+            nome: plano.nome,
+            preco: parseFloat(plano.preco),
+            duracao: duracaoEmMinutos,
+            mikrotik_id: plano.mikrotik_id
+          });
+
+        if (error) throw error;
+      }
+
+      // Recarregar dados após salvar
+      await loadData();
+      
+      setShowPlanoModal(false);
+      setEditingPlano(null);
+    } catch (error) {
+      console.error('Erro ao salvar plano:', error);
+      alert('Erro ao salvar plano. Tente novamente.');
+    }
+  };
+
+  const deletePlano = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('planos')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      setPlanos(prev => prev.filter(p => p.id !== id));
+    } catch (error) {
+      console.error('Erro ao deletar plano:', error);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="responsive-padding py-4 lg:py-6 space-y-6 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="text-red-500 text-base md:text-lg font-semibold mb-2">Erro ao carregar dados</div>
-            <p className="text-gray-600 text-sm md:text-base">Não foi possível carregar os dados do cliente.</p>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-48"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-gray-200 rounded-lg h-64"></div>
+            <div className="bg-gray-200 rounded-lg h-64"></div>
           </div>
         </div>
       </div>
@@ -356,286 +666,801 @@ const ClientDashboard = () => {
   }
 
   return (
-    <div className="responsive-padding py-4 lg:py-6 space-y-4 md:space-y-6 bg-gray-50 min-h-screen">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900">
-            <span className="hidden sm:inline">Dashboard do Cliente</span>
-            <span className="sm:hidden">Dashboard</span>
-          </h1>
-          <p className="text-gray-600 mt-1 text-sm md:text-base">Bem-vindo, {clientData.nome}</p>
+          <h1 className="text-3xl font-bold text-gray-900">Meus MikroTiks</h1>
+          <p className="text-gray-600 mt-1">Gerencie seus equipamentos e planos de internet</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <button 
-            onClick={() => window.location.reload()}
-            className="btn-primary flex items-center gap-2 text-xs md:text-sm"
-          >
-            <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
-            <span className="hidden sm:inline">Atualizar</span>
-            <span className="sm:hidden">Refresh</span>
-          </button>
-          <div className="flex items-center bg-white px-2 md:px-3 py-1 md:py-2 rounded-lg shadow-sm border border-gray-200">
-            <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-            <span className="text-gray-600 text-xs md:text-sm font-medium">Online</span>
-          </div>
-        </div>
+        <button
+          onClick={loadData}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </button>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
-          <div className="flex items-center justify-between mb-2 md:mb-3">
-            <div className="w-6 h-6 md:w-8 md:h-8 bg-green-100 rounded-lg flex items-center justify-center">
-              <Wallet className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
-            </div>
-            <span className="text-green-600 text-xs font-semibold hidden sm:block">Disponível</span>
-          </div>
-          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1 truncate">R$ {Number(clientData.saldo || 0).toFixed(2)}</h3>
-          <p className="text-gray-600 text-xs md:text-sm truncate">Saldo Atual</p>
-        </div>
-
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
-          <div className="flex items-center justify-between mb-2 md:mb-3">
-            <div className="w-6 h-6 md:w-8 md:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-3 h-3 md:w-4 md:h-4 text-blue-600" />
-            </div>
-            <span className="text-blue-600 text-xs font-semibold hidden sm:block">Este Mês</span>
-          </div>
-          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1">{dashboardStats.vendasMesAtual}</h3>
-          <p className="text-gray-600 text-xs md:text-sm truncate">
-            <span className="hidden sm:inline">Vendas do Mês</span>
-            <span className="sm:hidden">Vendas</span>
-          </p>
-        </div>
-
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
-          <div className="flex items-center justify-between mb-2 md:mb-3">
-            <div className="w-6 h-6 md:w-8 md:h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-3 h-3 md:w-4 md:h-4 text-purple-600" />
-            </div>
-            <span className="text-purple-600 text-xs font-semibold hidden sm:block">Hoje</span>
-          </div>
-          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1 truncate">R$ {dashboardStats.receitaDiaAtual.toFixed(2)}</h3>
-          <p className="text-gray-600 text-xs md:text-sm truncate">
-            <span className="hidden sm:inline">Receita do Dia</span>
-            <span className="sm:hidden">Receita</span>
-          </p>
-        </div>
-
-        <div className="bg-white rounded-lg md:rounded-xl shadow-sm border border-gray-200 p-3 md:p-4">
-          <div className="flex items-center justify-between mb-2 md:mb-3">
-            <div className="w-6 h-6 md:w-8 md:h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Key className="w-3 h-3 md:w-4 md:h-4 text-orange-600" />
-            </div>
-            <span className="text-orange-600 text-xs font-semibold hidden sm:block">Ativas</span>
-          </div>
-          <h3 className="text-sm md:text-lg font-bold text-gray-900 mb-1">{dashboardStats.totalSenhasDisponiveis}</h3>
-          <p className="text-gray-600 text-xs md:text-sm truncate">
-            <span className="hidden sm:inline">Senhas Disponíveis</span>
-            <span className="sm:hidden">Senhas</span>
-          </p>
-        </div>
-      </div>
-
-      {/* Meus Mikrotiks */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
-          <Radio className="w-5 h-5 text-blue-600" />
-          Meus Mikrotiks
-        </h2>
-        
-        <div className="space-y-6">
-          {userMikrotiks.length === 0 ? (
-            <div className="text-center py-8">
-              <Radio className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">Nenhum Mikrotik encontrado</p>
-            </div>
-          ) : (
-            userMikrotiks.map((mikrotik) => (
-              <div key={mikrotik.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                      <Radio className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{mikrotik.nome}</h3>
-                      <p className="text-sm text-gray-500">{mikrotik.provider_name || 'N/A'}</p>
-                    </div>
-                  </div>
-                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                    {mikrotik.status || 'Ativo'}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {(!mikrotik.planos || mikrotik.planos.length === 0) ? (
-                    <div className="col-span-full text-center py-4 text-gray-500">
-                      Nenhum plano encontrado
-                    </div>
-                  ) : (
-                    mikrotik.planos.map((plan, index) => (
-                      <div key={plan.id || index} className="bg-white rounded-lg p-3 border border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="font-medium text-gray-900 text-sm">{plan.nome}</h4>
-                          <span className="text-sm font-bold text-green-600">R$ {Number(plan.preco || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Disponíveis:</span>
-                            <span className="font-semibold text-green-600">{plan.available || 0}</span>
+      {/* MikroTiks com Planos Integrados - Grid 2 por linha */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {mikrotiks.length > 0 ? (
+          mikrotiks.map((mikrotik) => {
+            const mikrotiksPlanos = planos.filter(p => p.mikrotik_id === mikrotik.id);
+            
+            return (
+              <div key={mikrotik.id} className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                {/* Header do MikroTik - Reduzido */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <Router className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        {editingMikrotik === mikrotik.id ? (
+                          <input
+                            type="text"
+                            defaultValue={mikrotik.nome}
+                            className="text-lg font-bold text-gray-900 bg-white border rounded px-2 py-1"
+                            onBlur={(e) => updateMikrotikName(mikrotik.id, e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                updateMikrotikName(mikrotik.id, e.currentTarget.value);
+                              }
+                            }}
+                            autoFocus
+                          />
+                        ) : (
+                          <h3 className="text-lg font-bold text-gray-900">{mikrotik.nome}</h3>
+                        )}
+                        <div className="flex items-center space-x-3 mt-1">
+                          <div className="flex items-center space-x-1">
+                            <div className={`w-2 h-2 rounded-full ${mikrotik.status === 'Ativo' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            <span className="text-sm font-medium text-gray-600">{mikrotik.status}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Vendidas:</span>
-                            <span className="font-semibold text-blue-600">{plan.sold || 0}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Total:</span>
-                            <span className="font-bold text-gray-900">{plan.totalPasswords || 0}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-gray-200 pt-1">
-                            <span className="text-gray-600">Receita:</span>
-                            <span className="font-semibold text-purple-600">R$ {(plan.revenue || 0).toFixed(2)}</span>
-                          </div>
+                          {mikrotik.provider_name && (
+                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                              {mikrotik.provider_name}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    ))
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setEditingMikrotik(editingMikrotik === mikrotik.id ? null : mikrotik.id)}
+                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                        title="Editar nome do MikroTik"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Planos do MikroTik */}
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-md font-semibold text-gray-900">Planos de Internet</h4>
+                    <button
+                      onClick={() => {
+                        setEditingPlano({ nome: '', preco: '', duracao: '', unidadeTempo: 'horas', mikrotik_id: mikrotik.id });
+                        setShowPlanoModal(true);
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Novo Plano
+                    </button>
+                  </div>
+                  
+                  {mikrotiksPlanos.length > 0 ? (
+                    <div className="space-y-3">
+                      {mikrotiksPlanos.map((plano) => {
+                        const { value, unit } = convertFromMinutes(plano.duracao);
+                        return (
+                          <div key={plano.id} className="p-3 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200 hover:border-green-300 hover:shadow-md transition-all duration-200">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                  <h5 className="font-semibold text-gray-900 truncate">{plano.nome}</h5>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3">
+                                    <div className="flex items-center space-x-1">
+                                      <DollarSign className="w-4 h-4 text-green-600" />
+                                      <span className="text-lg font-bold text-green-600">
+                                        {parseFloat(plano.preco || '0').toFixed(2)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center space-x-1">
+                                      <Clock className="w-3 h-3 text-gray-500" />
+                                      <span className="text-sm text-gray-600">
+                                        {value} {unit}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-1">
+                                    <button
+                                      onClick={() => {
+                                        const { value, unit } = convertFromMinutes(plano.duracao);
+                                        setEditingPlano({
+                                          ...plano,
+                                          duracao: value.toString(),
+                                          unidadeTempo: unit
+                                        });
+                                        setShowPlanoModal(true);
+                                      }}
+                                      className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors"
+                                      title="Editar plano"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (confirm('Tem certeza que deseja deletar este plano?')) {
+                                          deletePlano(plano.id);
+                                        }
+                                      }}
+                                      className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded transition-colors"
+                                      title="Deletar plano"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-1 text-xs text-green-700 bg-green-100 px-2 py-1 rounded mt-2">
+                                  <TrendingUp className="w-3 h-3" />
+                                  <span>R$ {(parseFloat(plano.preco || '0') / (plano.duracao / 60)).toFixed(2)}/hora</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">
+                      <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p className="font-medium text-sm">Nenhum plano criado ainda</p>
+                      <p className="text-xs">Clique em "Novo Plano" para criar o primeiro plano</p>
+                    </div>
                   )}
                 </div>
               </div>
-            ))
+            );
+          })
+        ) : (
+          <div className="col-span-full bg-white rounded-xl shadow-sm border p-12 text-center">
+            <Router className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum MikroTik vinculado</h3>
+            <p className="text-gray-600 mb-4">
+              Entre em contato com o administrador para vincular seus equipamentos ao seu usuário.
+            </p>
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-blue-700">
+                💡 <strong>Dica:</strong> Após a vinculação, você poderá criar e gerenciar planos de internet para cada equipamento.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal para editar/criar plano */}
+      {showPlanoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">
+              {editingPlano?.id ? 'Editar Plano' : 'Novo Plano'}
+              {editingPlano?.mikrotik_id && (
+                <span className="text-sm font-normal text-gray-600 ml-2">
+                  - {mikrotiks.find(m => m.id === editingPlano.mikrotik_id)?.nome}
+                </span>
+              )}
+            </h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                savePlano({
+                  id: editingPlano?.id,
+                  nome: formData.get('nome'),
+                  preco: formData.get('preco'),
+                  duracao: formData.get('duracao'),
+                  unidadeTempo: formData.get('unidadeTempo'),
+                  mikrotik_id: formData.get('mikrotik_id')
+                });
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                <input
+                  type="text"
+                  name="nome"
+                  defaultValue={editingPlano?.nome || ''}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Preço (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="preco"
+                  defaultValue={editingPlano?.preco || ''}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duração</label>
+                  <input
+                    type="number"
+                    name="duracao"
+                    defaultValue={editingPlano?.duracao || ''}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
+                  <select
+                    name="unidadeTempo"
+                    defaultValue={editingPlano?.unidadeTempo || 'horas'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  >
+                    <option value="minutos">Minutos</option>
+                    <option value="horas">Horas</option>
+                    <option value="dias">Dias</option>
+                  </select>
+                </div>
+              </div>
+              {!editingPlano?.id && mikrotiks.length > 1 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">MikroTik</label>
+                  <select
+                    name="mikrotik_id"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    defaultValue={editingPlano?.mikrotik_id || ''}
+                    required
+                  >
+                    <option value="">Selecione um MikroTik</option>
+                    {mikrotiks.map((mikrotik) => (
+                      <option key={mikrotik.id} value={mikrotik.id}>
+                        {mikrotik.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              {/* Campo hidden para mikrotik_id quando há apenas um MikroTik ou já está definido */}
+              {(editingPlano?.mikrotik_id || mikrotiks.length === 1) && (
+                <input
+                  type="hidden"
+                  name="mikrotik_id"
+                  value={editingPlano?.mikrotik_id || mikrotiks[0]?.id || ''}
+                />
+              )}
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPlanoModal(false);
+                    setEditingPlano(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+// Página de relatórios do cliente
+function ClientReports() {
+  const [salesData, setSalesData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [dateRange, setDateRange] = useState('month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  useEffect(() => {
+    loadReportsData();
+  }, [dateRange]);
+
+  const loadReportsData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      // Buscar dados do usuário atual
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      // Buscar cliente
+      let clienteRes = await supabase.from('clientes').select('*').eq('id', authUser.id).maybeSingle();
+      if (!clienteRes.data) {
+        clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
+      }
+
+      const cliente = clienteRes.data;
+      if (!cliente) return;
+
+      // Buscar MikroTiks do cliente
+      const { data: mikrotiks } = await supabase
+        .from('mikrotiks')
+        .select('id, nome')
+        .eq('cliente_id', cliente.id);
+
+      if (!mikrotiks || mikrotiks.length === 0) {
+        setSalesData([]);
+        setLoading(false);
+        return;
+      }
+
+      const mikrotikIds = mikrotiks.map(m => m.id);
+
+      // Construir query com filtros de data
+      let query = supabase
+        .from('vendas')
+        .select(`
+          id,
+          data,
+          preco,
+          valor,
+          status,
+          mikrotik_id,
+          plano_id,
+          mac_id
+        `)
+        .in('mikrotik_id', mikrotikIds)
+        .order('data', { ascending: false });
+
+      // Aplicar filtros de data
+      if (dateRange === 'today') {
+        const today = new Date().toISOString().split('T')[0];
+        query = query.gte('data', today + 'T00:00:00').lte('data', today + 'T23:59:59');
+      } else if (dateRange === 'week') {
+        const agora = new Date();
+        const inicioSemana = new Date(agora);
+        const diaDaSemana = agora.getDay();
+        const diasParaSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1;
+        inicioSemana.setDate(agora.getDate() - diasParaSegunda);
+        inicioSemana.setHours(0, 0, 0, 0);
+        query = query.gte('data', inicioSemana.toISOString());
+      } else if (dateRange === 'month') {
+        const monthAgo = new Date();
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        query = query.gte('data', monthAgo.toISOString());
+      } else if (dateRange === 'custom' && startDate && endDate) {
+        query = query.gte('data', startDate + 'T00:00:00').lte('data', endDate + 'T23:59:59');
+      }
+
+      const { data: vendasData, error: queryError } = await query;
+
+      if (queryError) {
+        setError('Erro ao carregar relatórios');
+        console.error('Erro:', queryError);
+        return;
+      }
+
+      // Buscar dados relacionados separadamente
+      const vendas = vendasData || [];
+      
+      if (vendas.length === 0) {
+        setSalesData([]);
+        return;
+      }
+
+      const mikrotikIdsFromVendas = [...new Set(vendas.map(v => v.mikrotik_id))];
+      const planoIdsFromVendas = [...new Set(vendas.map(v => v.plano_id))];
+      const macIdsFromVendas = [...new Set(vendas.map(v => v.mac_id).filter(Boolean))];
+
+      const [mikrotiksRes, planosRes, macsRes] = await Promise.all([
+        supabase.from('mikrotiks').select('id, nome').in('id', mikrotikIdsFromVendas),
+        supabase.from('planos').select('id, nome, duracao').in('id', planoIdsFromVendas),
+        macIdsFromVendas.length > 0 ? 
+          supabase.from('macs').select('id, mac_address, primeiro_acesso').in('id', macIdsFromVendas) :
+          Promise.resolve({ data: [] })
+      ]);
+
+      // Criar mapas para lookup rápido
+      const mikrotiksMap = new Map((mikrotiksRes.data || []).map(m => [m.id, m]));
+      const planosMap = new Map((planosRes.data || []).map(p => [p.id, p]));
+      const macsMap = new Map((macsRes.data || []).map(m => [m.id, m]));
+
+      // Combinar dados
+      const vendasComDados = vendas.map(venda => ({
+        ...venda,
+        mikrotiks: mikrotiksMap.get(venda.mikrotik_id),
+        planos: planosMap.get(venda.plano_id),
+        macs: macsMap.get(venda.mac_id)
+      }));
+
+      setSalesData(vendasComDados);
+
+    } catch (err) {
+      console.error('Erro ao carregar relatórios:', err);
+      setError('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'aprovado':
+        return (
+          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+            ✅ Aprovado
+          </span>
+        );
+      case 'pendente':
+        return (
+          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+            ⏳ Pendente
+          </span>
+        );
+      case 'cancelado':
+        return (
+          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+            ❌ Cancelado
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+            {status}
+          </span>
+        );
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-48"></div>
+          <div className="bg-gray-200 rounded-lg h-64"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Relatórios de Vendas</h1>
+          <p className="text-gray-600 mt-1">
+            {salesData.length} venda{salesData.length !== 1 ? 's' : ''} encontrada{salesData.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <button
+          onClick={loadReportsData}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div className="bg-white rounded-xl shadow-sm border p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Período</label>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="today">Hoje</option>
+              <option value="week">Esta semana</option>
+              <option value="month">Último mês</option>
+              <option value="custom">Período personalizado</option>
+            </select>
+          </div>
+          
+          {dateRange === 'custom' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data inicial</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data final</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </>
           )}
+          
+          <div className="flex items-end">
+            <button
+              onClick={loadReportsData}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Filtrar
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Sales History */}
-        <div className="xl:col-span-2">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
-                Histórico de Vendas
-              </h2>
-              <button className="btn-primary text-sm flex items-center gap-2">
-                <Download className="w-4 h-4" />
-                Exportar
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              {salesHistory.length === 0 ? (
-                <div className="text-center py-8">
-                  <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Nenhuma venda encontrada</p>
-                </div>
+      {/* Tabela de vendas */}
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Data/Hora
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  MikroTik
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Plano
+                </th>
+
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  MAC Address
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Valor
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {salesData.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <BarChart3 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">Nenhuma venda encontrada</p>
+                    <p className="text-gray-400 text-sm mt-1">
+                      Vendas aparecerão aqui quando estiverem disponíveis
+                    </p>
+                  </td>
+                </tr>
               ) : (
-                salesHistory.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                        <DollarSign className="w-4 h-4 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 text-sm">
-                          {sale.planos?.nome || 'Plano N/A'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {sale.mikrotiks?.nome || 'Mikrotik N/A'}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(sale.data).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900 text-sm">R$ {Number(sale.preco || 0).toFixed(2)}</p>
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        {sale.status === 'aprovado' ? 'Concluída' : sale.status}
-                      </span>
-                    </div>
-                  </div>
-                ))
+                salesData.map((venda) => {
+                  return (
+                    <tr key={venda.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatDate(venda.data)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Router className="w-4 h-4 text-gray-400 mr-2" />
+                          <span className="text-sm font-medium text-gray-900">
+                            {venda.mikrotiks?.nome || 'N/A'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{venda.planos?.nome || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{venda.planos?.duracao || 0} min</div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-mono text-gray-900">
+                          {venda.macs?.mac_address || 'N/A'}
+                        </div>
+                        {venda.macs?.primeiro_acesso && (
+                          <div className="text-xs text-gray-500">
+                            1º acesso: {formatDate(venda.macs.primeiro_acesso)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-green-600">
+                          R$ {parseFloat(venda.valor || '0').toFixed(2)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Plano: R$ {parseFloat(venda.preco || '0').toFixed(2)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(venda.status)}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
-            <div className="space-y-3">
-              <button className="w-full btn-primary flex items-center justify-center gap-2 text-sm">
-                <Wallet className="w-4 h-4" />
-                Solicitar Saque
-              </button>
-              <button className="w-full btn-secondary flex items-center justify-center gap-2 text-sm">
-                <Download className="w-4 h-4" />
-                Baixar Relatório
-              </button>
-              <button className="w-full btn-secondary flex items-center justify-center gap-2 text-sm">
-                <Calendar className="w-4 h-4" />
-                Ver Histórico Completo
-              </button>
-            </div>
-          </div>
-
-          {/* Monthly Performance */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-green-600" />
-              Performance Mensal
-            </h3>
-            <div className="space-y-3">
-              {monthlyStats.map((stat, index) => (
-                <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <span className="text-gray-600 font-medium text-sm">{stat.month}</span>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900 text-sm">{stat.sales} vendas</p>
-                    <p className="text-green-600 text-xs">R$ {stat.revenue.toFixed(2)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Password Summary */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumo Geral</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm">Senhas Disponíveis</span>
-                <span className="font-bold text-green-600">{dashboardStats.totalSenhasDisponiveis}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm">Vendas do Mês</span>
-                <span className="font-bold text-blue-600">{dashboardStats.vendasMesAtual}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm">Receita do Dia</span>
-                <span className="font-bold text-purple-600">R$ {dashboardStats.receitaDiaAtual.toFixed(2)}</span>
-              </div>
-              <div className="pt-2 border-t border-gray-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600 text-sm">Receita Total</span>
-                  <span className="font-bold text-green-600">R$ {dashboardStats.totalReceita.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600">{error}</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Componente simples para outras páginas
+function SimplePage({ title }: { title: string }) {
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-3xl font-bold text-gray-900 mb-6">{title}</h1>
+      <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <BarChart3 className="w-8 h-8 text-gray-400" />
+        </div>
+        <p className="text-gray-600 text-lg font-medium mb-2">Esta página está sendo desenvolvida</p>
+        <p className="text-gray-500">Em breve teremos mais funcionalidades!</p>
       </div>
     </div>
   );
-};
+}
 
-export default ClientDashboard;
+export default function ClientDashboard({ user, onLogout }: ClientDashboardProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  const navigation = [
+    { name: 'Dashboard', href: '/client', icon: LayoutDashboard },
+    { name: 'Saques', href: '/client/withdrawals', icon: CreditCard },
+    { name: 'MikroTiks', href: '/client/mikrotiks', icon: Router },
+    { name: 'Relatórios', href: '/client/reports', icon: BarChart3 },
+  ];
+
+  const isActivePath = (href: string) => {
+    if (href === '/client') {
+      return location.pathname === '/client' || location.pathname === '/client/';
+    }
+    return location.pathname.startsWith(href);
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      {/* Sidebar mobile overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-green-600 to-green-700">
+            <h2 className="text-xl font-bold text-white">Pix Mikro</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 rounded-md text-green-100 hover:text-white hover:bg-green-500/20"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* User info */}
+          <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-green-50">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
+                <UserCheck className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">{user.name || user.email}</p>
+                <p className="text-sm text-green-600 font-medium">Cliente</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                to={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  isActivePath(item.href)
+                    ? 'bg-green-50 text-green-700 border-r-2 border-green-700 shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon className={`w-5 h-5 mr-3 ${isActivePath(item.href) ? 'text-green-600' : ''}`} />
+                {item.name}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Logout */}
+          <div className="p-4 border-t">
+            <button
+              onClick={onLogout}
+              className="w-full flex items-center px-3 py-2.5 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <LogOut className="w-5 h-5 mr-3" />
+              Sair
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <div className="flex h-16 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6">
+          <button
+            type="button"
+            className="lg:hidden p-2.5 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
+            <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" />
+              <span className="text-sm text-gray-500">
+                Bem-vindo, {user.name || user.email}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<DashboardContent />} />
+            <Route path="/withdrawals" element={<ClientWithdrawals />} />
+            <Route path="/mikrotiks" element={<ClientMikrotiks />} />
+            <Route path="/reports" element={<ClientReports />} />
+            <Route path="*" element={<Navigate to="/client" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </div>
+  );
+}

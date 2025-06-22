@@ -1,22 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Radio, 
-  Users, 
-  Settings, 
-  Download, 
-  Edit, 
+  Router, 
   Plus, 
   Search, 
-  RefreshCw, 
-  BarChart3,
-  Filter,
+  Edit, 
+  Trash2, 
+  Users,
   MoreHorizontal,
-  Trash2,
-  Upload,
-  Wifi,
-  Activity,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
   AlertCircle,
-  CheckCircle2
+  Settings,
+  DollarSign,
+  Percent,
+  TrendingUp
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,16 +51,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabaseClient';
-import { useLogger } from '@/lib/logger';
+
+interface User {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+  name?: string;
+}
 
 interface Mikrotik {
   id: string;
   nome: string;
-  provider_name: string;
-  status: 'Ativo' | 'Inativo';
-  cliente_id: string;
+  provider_name?: string;
+  status: string;
+  cliente_id?: string;
+  criado_em: string;
   profitpercentage: number;
 }
 
@@ -70,25 +74,30 @@ interface Plan {
   id: string;
   nome: string;
   preco: number;
+  duracao: number;
   mikrotik_id: string;
+  criado_em: string;
 }
 
 interface Cliente {
   id: string;
   nome: string;
+  email: string;
+  role: string;
 }
 
-const MikrotiksManagement = () => {
-  const log = useLogger('MikrotiksManagement');
+interface MikrotiksManagementProps {
+  currentUser?: User;
+}
+
+const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPlansModal, setShowPlansModal] = useState(false);
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
   const [selectedMikrotik, setSelectedMikrotik] = useState<Mikrotik | null>(null);
   const [editingMikrotik, setEditingMikrotik] = useState<Mikrotik | null>(null);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [importPlan, setImportPlan] = useState<Plan | null>(null);
   
   const [mikrotiks, setMikrotiks] = useState<Mikrotik[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -100,147 +109,113 @@ const MikrotiksManagement = () => {
   const [formData, setFormData] = useState({
     nome: '',
     provider_name: '',
-    cliente_id: '',
-    profitpercentage: 0
+    profitpercentage: 10,
+    status: 'Ativo',
+    cliente_id: ''
   });
+
+  const [showLinkClientModal, setShowLinkClientModal] = useState(false);
+  const [linkingMikrotik, setLinkingMikrotik] = useState<Mikrotik | null>(null);
   
   const [planFormData, setPlanFormData] = useState({
     nome: '',
-    preco: ''
+    preco: '',
+    duracao: 60
   });
   
-  const [importText, setImportText] = useState('');
-  const [importLoading, setImportLoading] = useState(false);
-  const [senhaCounts, setSenhaCounts] = useState<Record<string, number>>({});
+  const [filterStatus, setFilterStatus] = useState<'all' | 'Ativo' | 'Inativo'>('all');
 
   useEffect(() => {
-    log.mount();
     fetchData();
-    
-    return () => {
-      log.unmount();
-    };
   }, []);
 
   const fetchData = async () => {
-    const timerId = log.startTimer('fetch-data');
-    
     try {
-      log.info('Fetching mikrotiks and clients');
       setLoading(true);
       setError('');
       
+      let mikrotiksQuery = supabase.from('mikrotiks').select('*');
+      
+      // Se não for admin, filtrar apenas mikrotiks do usuário
+      if (currentUser?.role !== 'admin' && currentUser?.id) {
+        mikrotiksQuery = mikrotiksQuery.eq('cliente_id', currentUser.id);
+      }
+      
       const [mikrotiksResult, clientesResult] = await Promise.all([
-        supabase.from('mikrotiks').select('*'),
-        supabase.from('clientes').select('id, nome')
+        mikrotiksQuery.order('criado_em', { ascending: false }),
+        supabase.from('clientes').select('id, nome, email, role')
       ]);
       
-      if (mikrotiksResult.error) {
-        log.error('Failed to fetch mikrotiks', mikrotiksResult.error);
-        throw mikrotiksResult.error;
-      }
-      
-      if (clientesResult.error) {
-        log.error('Failed to fetch clients', clientesResult.error);
-        throw clientesResult.error;
-      }
+      if (mikrotiksResult.error) throw mikrotiksResult.error;
+      if (clientesResult.error) throw clientesResult.error;
       
       setMikrotiks(mikrotiksResult.data || []);
       setClientes(clientesResult.data || []);
-      log.info('Data fetched successfully', { 
-        mikrotiks: mikrotiksResult.data?.length, 
-        clients: clientesResult.data?.length 
-      });
       
-    } catch (err) {
-      log.error('Failed to fetch data', err);
+    } catch (err: any) {
+      console.error('Erro ao carregar dados:', err);
       setError('Erro ao carregar dados');
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'fetch-data');
     }
   };
 
-  const fetchPlans = useCallback(async () => {
+  const fetchPlans = async () => {
     if (!selectedMikrotik) return;
     
-    const timerId = log.startTimer('fetch-plans');
-    
     try {
-      log.info('Fetching plans for mikrotik', { mikrotikId: selectedMikrotik.id });
-      
       const { data: planosData, error } = await supabase
         .from('planos')
         .select('*')
-        .eq('mikrotik_id', selectedMikrotik.id);
+        .eq('mikrotik_id', selectedMikrotik.id)
+        .order('criado_em', { ascending: false });
       
       if (error) throw error;
-      
       setPlans(planosData || []);
       
-      // Fetch password counts
-      if (planosData && planosData.length > 0) {
-        const ids = planosData.map(p => p.id);
-        const { data: senhasData } = await supabase
-          .from('senhas')
-          .select('plano_id')
-          .in('plano_id', ids);
-        
-        const counts: Record<string, number> = {};
-        (senhasData || []).forEach(s => {
-          counts[s.plano_id] = (counts[s.plano_id] || 0) + 1;
-        });
-        setSenhaCounts(counts);
-      } else {
-        setSenhaCounts({});
-      }
-      
-      log.info('Plans fetched successfully', { plansCount: planosData?.length });
-      
-    } catch (err) {
-      log.error('Failed to fetch plans', err);
+    } catch (err: any) {
+      console.error('Erro ao carregar planos:', err);
       setError('Erro ao carregar planos');
-    } finally {
-      log.endTimer(timerId, 'fetch-plans');
     }
-  }, [selectedMikrotik]);
+  };
 
   useEffect(() => {
-    fetchPlans();
-  }, [fetchPlans]);
+    if (showPlansModal && selectedMikrotik) {
+      fetchPlans();
+    }
+  }, [showPlansModal, selectedMikrotik]);
 
   const handleCreateMikrotik = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const timerId = log.startTimer('create-mikrotik');
-    
     try {
-      log.info('Creating new mikrotik');
       setLoading(true);
       setError('');
       
-      const { error } = await supabase.from('mikrotiks').insert([{
+      const mikrotikData = {
         nome: formData.nome,
         provider_name: formData.provider_name,
-        status: 'Ativo',
-        cliente_id: formData.cliente_id,
-        profitpercentage: formData.profitpercentage
-      }]);
+        profitpercentage: formData.profitpercentage,
+        status: formData.status,
+        cliente_id: currentUser?.role === 'admin' ? (formData.cliente_id || null) : currentUser?.id
+      };
+      
+      const { error } = await supabase
+        .from('mikrotiks')
+        .insert([mikrotikData]);
       
       if (error) throw error;
       
-      setSuccess('Mikrotik criado com sucesso!');
+      setSuccess('MikroTik criado com sucesso!');
       setShowAddModal(false);
-      setFormData({ nome: '', provider_name: '', cliente_id: '', profitpercentage: 0 });
-      fetchData();
-      log.info('Mikrotik created successfully');
+      resetForm();
+      await fetchData();
       
-    } catch (err) {
-      log.error('Failed to create mikrotik', err);
-      setError('Erro ao criar mikrotik');
+    } catch (err: any) {
+      console.error('Erro ao criar mikrotik:', err);
+      setError('Erro ao criar MikroTik');
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'create-mikrotik');
     }
   };
 
@@ -248,62 +223,59 @@ const MikrotiksManagement = () => {
     e.preventDefault();
     if (!editingMikrotik) return;
     
-    const timerId = log.startTimer('update-mikrotik');
-    
     try {
-      log.info('Updating mikrotik', { id: editingMikrotik.id });
       setLoading(true);
       setError('');
       
+             const updateData: any = {
+         nome: formData.nome,
+         provider_name: formData.provider_name,
+         profitpercentage: formData.profitpercentage,
+         status: formData.status
+       };
+
+       // Se for admin, permite alterar o cliente_id
+       if (currentUser?.role === 'admin') {
+         updateData.cliente_id = formData.cliente_id || null;
+       }
+      
       const { error } = await supabase
         .from('mikrotiks')
-        .update({
-          nome: formData.nome,
-          provider_name: formData.provider_name,
-          cliente_id: formData.cliente_id,
-          profitpercentage: formData.profitpercentage
-        })
+        .update(updateData)
         .eq('id', editingMikrotik.id);
       
       if (error) throw error;
       
-      setSuccess('Mikrotik atualizado com sucesso!');
+      setSuccess('MikroTik atualizado com sucesso!');
+      setShowAddModal(false);
       setEditingMikrotik(null);
-      setFormData({ nome: '', provider_name: '', cliente_id: '', profitpercentage: 0 });
-      fetchData();
-      log.info('Mikrotik updated successfully');
+      await fetchData();
       
-    } catch (err) {
-      log.error('Failed to update mikrotik', err);
-      setError('Erro ao atualizar mikrotik');
+    } catch (err: any) {
+      console.error('Erro ao atualizar mikrotik:', err);
+      setError('Erro ao atualizar MikroTik');
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'update-mikrotik');
     }
   };
 
   const handleDeleteMikrotik = async (mikrotik: Mikrotik) => {
-    if (!window.confirm(`Tem certeza que deseja excluir o mikrotik "${mikrotik.nome}"?`)) {
-      return;
-    }
-    
-    const timerId = log.startTimer('delete-mikrotik');
+    if (!confirm(`Tem certeza que deseja excluir o MikroTik "${mikrotik.nome}"?`)) return;
     
     try {
-      log.info('Deleting mikrotik', { id: mikrotik.id });
+      const { error } = await supabase
+        .from('mikrotiks')
+        .delete()
+        .eq('id', mikrotik.id);
       
-      const { error } = await supabase.from('mikrotiks').delete().eq('id', mikrotik.id);
       if (error) throw error;
       
-      setSuccess('Mikrotik excluído com sucesso!');
-      fetchData();
-      log.info('Mikrotik deleted successfully');
+      setSuccess('MikroTik excluído com sucesso!');
+      await fetchData();
       
-    } catch (err) {
-      log.error('Failed to delete mikrotik', err);
-      setError('Erro ao excluir mikrotik');
-    } finally {
-      log.endTimer(timerId, 'delete-mikrotik');
+    } catch (err: any) {
+      console.error('Erro ao excluir mikrotik:', err);
+      setError('Erro ao excluir MikroTik');
     }
   };
 
@@ -311,33 +283,31 @@ const MikrotiksManagement = () => {
     e.preventDefault();
     if (!selectedMikrotik) return;
     
-    const timerId = log.startTimer('create-plan');
-    
     try {
-      log.info('Creating new plan');
       setLoading(true);
       setError('');
       
-      const { error } = await supabase.from('planos').insert([{
-        nome: planFormData.nome,
-        preco: parseFloat(planFormData.preco),
-        mikrotik_id: selectedMikrotik.id
-      }]);
+      const { error } = await supabase
+        .from('planos')
+        .insert([{
+          nome: planFormData.nome,
+          preco: parseFloat(planFormData.preco),
+          duracao: planFormData.duracao,
+          mikrotik_id: selectedMikrotik.id
+        }]);
       
       if (error) throw error;
       
       setSuccess('Plano criado com sucesso!');
       setShowAddPlanModal(false);
-      setPlanFormData({ nome: '', preco: '' });
-      fetchPlans();
-      log.info('Plan created successfully');
+      setPlanFormData({ nome: '', preco: '', duracao: 60 });
+      await fetchPlans();
       
-    } catch (err) {
-      log.error('Failed to create plan', err);
+    } catch (err: any) {
+      console.error('Erro ao criar plano:', err);
       setError('Erro ao criar plano');
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'create-plan');
     }
   };
 
@@ -345,10 +315,7 @@ const MikrotiksManagement = () => {
     e.preventDefault();
     if (!editingPlan) return;
     
-    const timerId = log.startTimer('update-plan');
-    
     try {
-      log.info('Updating plan', { id: editingPlan.id });
       setLoading(true);
       setError('');
       
@@ -356,355 +323,335 @@ const MikrotiksManagement = () => {
         .from('planos')
         .update({
           nome: planFormData.nome,
-          preco: parseFloat(planFormData.preco)
+          preco: parseFloat(planFormData.preco),
+          duracao: planFormData.duracao
         })
         .eq('id', editingPlan.id);
       
       if (error) throw error;
       
       setSuccess('Plano atualizado com sucesso!');
+      setShowAddPlanModal(false);
       setEditingPlan(null);
-      setPlanFormData({ nome: '', preco: '' });
-      fetchPlans();
-      log.info('Plan updated successfully');
+      await fetchPlans();
       
-    } catch (err) {
-      log.error('Failed to update plan', err);
+    } catch (err: any) {
+      console.error('Erro ao atualizar plano:', err);
       setError('Erro ao atualizar plano');
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'update-plan');
     }
   };
 
   const handleDeletePlan = async (plan: Plan) => {
-    if (!window.confirm(`Tem certeza que deseja excluir o plano "${plan.nome}"?`)) {
-      return;
-    }
-    
-    const timerId = log.startTimer('delete-plan');
+    if (!confirm(`Tem certeza que deseja excluir o plano "${plan.nome}"?`)) return;
     
     try {
-      log.info('Deleting plan', { id: plan.id });
+      const { error } = await supabase
+        .from('planos')
+        .delete()
+        .eq('id', plan.id);
       
-      const { error } = await supabase.from('planos').delete().eq('id', plan.id);
       if (error) throw error;
       
       setSuccess('Plano excluído com sucesso!');
-      fetchPlans();
-      log.info('Plan deleted successfully');
+      await fetchPlans();
       
-    } catch (err) {
-      log.error('Failed to delete plan', err);
+    } catch (err: any) {
+      console.error('Erro ao excluir plano:', err);
       setError('Erro ao excluir plano');
     }
   };
 
-  const handleImportPasswords = async () => {
-    if (!importPlan || !importText.trim()) return;
-    
-    const timerId = log.startTimer('import-passwords');
-    
-    try {
-      log.info('Importing passwords', { planId: importPlan.id });
-      setImportLoading(true);
-      setError('');
-      
-      const lines = importText.trim().split('\n').filter(line => line.trim());
-      const passwords = lines.map(line => ({
-        senha: line.trim(),
-        plano_id: importPlan.id,
-        vendida: false,
-        data_criacao: new Date().toISOString()
-      }));
-      
-      const { error } = await supabase.from('senhas').insert(passwords);
-      if (error) throw error;
-      
-      setSuccess(`${passwords.length} senhas importadas com sucesso!`);
-      setShowImportModal(false);
-      setImportPlan(null);
-      setImportText('');
-      fetchPlans();
-      log.info('Passwords imported successfully', { count: passwords.length });
-      
-    } catch (err) {
-      log.error('Failed to import passwords', err);
-      setError('Erro ao importar senhas');
-    } finally {
-      setImportLoading(false);
-      log.endTimer(timerId, 'import-passwords');
-    }
+  const resetForm = () => {
+    setFormData({
+      nome: '',
+      provider_name: '',
+      profitpercentage: 10,
+      status: 'Ativo',
+      cliente_id: ''
+    });
   };
 
   const filteredMikrotiks = mikrotiks.filter(mikrotik => {
-    const nome = mikrotik.nome || '';
-    const provider = mikrotik.provider_name || '';
-    const owner = clientes.find(c => c.id === mikrotik.cliente_id)?.nome || '';
-    const term = searchTerm.toLowerCase();
-    return (
-      nome.toLowerCase().includes(term) ||
-      provider.toLowerCase().includes(term) ||
-      owner.toLowerCase().includes(term)
-    );
+    const matchesSearch = mikrotik.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (mikrotik.provider_name && mikrotik.provider_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesFilter = filterStatus === 'all' || mikrotik.status === filterStatus;
+    return matchesSearch && matchesFilter;
   });
 
-  const stats = {
-    total: mikrotiks.length,
-    active: mikrotiks.filter(m => m.status === 'Ativo').length,
-    totalPlans: plans.length,
-    totalPasswords: Object.values(senhaCounts).reduce((sum, count) => sum + count, 0)
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
   const getStatusBadge = (status: string) => {
-    const isActive = status === 'Ativo';
-    return (
-      <Badge 
-        variant={isActive ? 'default' : 'secondary'}
-        className={isActive ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
-      >
-        {status}
-      </Badge>
-    );
+    if (status === 'Ativo') {
+      return <Badge className="bg-green-100 text-green-800">Ativo</Badge>;
+    }
+    return <Badge variant="secondary" className="bg-red-100 text-red-800">Inativo</Badge>;
   };
 
-  if (loading && mikrotiks.length === 0) {
+  const clearMessages = () => {
+    setError('');
+    setSuccess('');
+  };
+
+  const handleLinkClient = async (mikrotikId: string, clienteId: string) => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const { error } = await supabase
+        .from('mikrotiks')
+        .update({ cliente_id: clienteId || null })
+        .eq('id', mikrotikId);
+
+      if (error) throw error;
+
+      setSuccess('Cliente vinculado com sucesso!');
+      setShowLinkClientModal(false);
+      setLinkingMikrotik(null);
+      fetchData();
+      
+    } catch (err: any) {
+      console.error('Erro ao vincular cliente:', err);
+      setError('Erro ao vincular cliente');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnlinkClient = async (mikrotikId: string) => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const { error } = await supabase
+        .from('mikrotiks')
+        .update({ cliente_id: null })
+        .eq('id', mikrotikId);
+
+      if (error) throw error;
+
+      setSuccess('Cliente desvinculado com sucesso!');
+      fetchData();
+      
+    } catch (err: any) {
+      console.error('Erro ao desvincular cliente:', err);
+      setError('Erro ao desvincular cliente');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getClientName = (clienteId: string) => {
+    const cliente = clientes.find(c => c.id === clienteId);
+    return cliente ? `${cliente.nome} (${cliente.email})` : 'Cliente não encontrado';
+  };
+
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                <div className="h-8 bg-gray-200 rounded w-3/4"></div>
-              </CardContent>
-            </Card>
-          ))}
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-64"></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-gray-200 rounded-lg h-32"></div>
+            ))}
+          </div>
+          <div className="bg-gray-200 rounded-lg h-64"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Radio className="w-8 h-8 text-blue-600" />
-            Gerenciamento de Mikrotiks
+          <h1 className="text-3xl font-bold text-gray-900">
+            {currentUser?.role === 'admin' ? 'Gerenciar MikroTiks' : 'Meu MikroTik'}
           </h1>
           <p className="text-gray-600 mt-1">
-            Controle de equipamentos, planos e senhas
+            {currentUser?.role === 'admin' 
+              ? `${filteredMikrotiks.length} equipamento${filteredMikrotiks.length !== 1 ? 's' : ''} cadastrado${filteredMikrotiks.length !== 1 ? 's' : ''}`
+              : 'Configure seus equipamentos e planos'
+            }
           </p>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Filter className="w-4 h-4" />
-            Filtros
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2" onClick={fetchData}>
+        <div className="flex gap-2">
+          <Button
+            onClick={fetchData}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
             <RefreshCw className="w-4 h-4" />
             Atualizar
           </Button>
-          <Button variant="outline" size="sm" className="gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Exportar
-          </Button>
-          <Button 
+          <Button
             onClick={() => {
-              setEditingMikrotik(null);
-              setFormData({ nome: '', provider_name: '', cliente_id: '', profitpercentage: 0 });
+              clearMessages();
               setShowAddModal(true);
             }}
-            className="gap-2 bg-blue-600 hover:bg-blue-700"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
           >
             <Plus className="w-4 h-4" />
-            Novo Mikrotik
+            Novo MikroTik
           </Button>
         </div>
       </div>
 
-      {/* Alert Messages */}
-      {error && (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            {error}
-          </AlertDescription>
-        </Alert>
-      )}
-
+      {/* Success/Error Messages */}
       {success && (
         <Alert className="border-green-200 bg-green-50">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">
-            {success}
-          </AlertDescription>
+          <CheckCircle className="w-4 h-4 text-green-600" />
+          <AlertDescription className="text-green-800">{success}</AlertDescription>
+        </Alert>
+      )}
+      
+      {error && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <AlertDescription className="text-red-800">{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Total Mikrotiks
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.total}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Radio className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total MikroTiks</CardTitle>
+            <Router className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{mikrotiks.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {mikrotiks.filter(m => m.status === 'Ativo').length} ativos
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Equipamentos Ativos
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.active}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <Activity className="w-6 h-6 text-green-600" />
-              </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Lucro Médio</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {mikrotiks.length > 0 
+                ? (mikrotiks.reduce((acc, m) => acc + m.profitpercentage, 0) / mikrotiks.length).toFixed(1)
+                : 0
+              }%
             </div>
-            <div className="flex items-center mt-4 gap-2">
-              <div className="flex items-center gap-1 text-green-600">
-                <span className="text-sm font-medium">
-                  {Math.round((stats.active / stats.total) * 100) || 0}% online
-                </span>
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Média de todos os equipamentos
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Planos Cadastrados
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalPlans}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Settings className="w-6 h-6 text-purple-600" />
-              </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Equipamentos Ativos</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {mikrotiks.filter(m => m.status === 'Ativo').length}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Senhas Disponíveis
-                </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalPasswords}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <Wifi className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              De {mikrotiks.length} total
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Table */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <CardTitle className="text-lg font-semibold">
-                Lista de Mikrotiks
-              </CardTitle>
-              <CardDescription>
-                Gerencie todos os equipamentos do sistema
-              </CardDescription>
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Buscar por nome..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
-            
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-80">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Buscar mikrotiks..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
+            <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Filtrar por status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="Ativo">Ativos</SelectItem>
+                <SelectItem value="Inativo">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* MikroTiks Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Equipamentos MikroTik</CardTitle>
+          <CardDescription>
+            Lista completa de equipamentos cadastrados no sistema
+          </CardDescription>
         </CardHeader>
-        
-        <CardContent className="p-0">
+        <CardContent>
           <Table>
             <TableHeader>
-              <TableRow className="border-gray-100">
-                <TableHead className="font-semibold">Equipamento</TableHead>
-                <TableHead className="font-semibold">Proprietário</TableHead>
-                <TableHead className="font-semibold">Provedor</TableHead>
-                <TableHead className="font-semibold">Lucro Admin</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
-                <TableHead className="font-semibold">Ações</TableHead>
+              <TableRow>
+                <TableHead>MikroTik</TableHead>
+                {currentUser?.role === 'admin' && <TableHead>Proprietário</TableHead>}
+                <TableHead>Porcentagem</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredMikrotiks.map((mikrotik) => (
-                <TableRow key={mikrotik.id} className="hover:bg-gray-50">
+                <TableRow key={mikrotik.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Radio className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <Router className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{mikrotik.nome}</p>
-                        <p className="text-sm text-gray-500">ID: {mikrotik.id}</p>
+                        <div className="font-medium text-gray-900">{mikrotik.nome}</div>
+                        <div className="text-sm text-gray-500">
+                          {mikrotik.provider_name || 'Sem provedor'}
+                        </div>
                       </div>
                     </div>
                   </TableCell>
+                  
+                  {currentUser?.role === 'admin' && (
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-gray-400" />
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-600">
+                            {mikrotik.cliente_id 
+                              ? clientes.find(c => c.id === mikrotik.cliente_id)?.nome || 'Cliente não encontrado'
+                              : 'Não vinculado'}
+                          </span>
+                          {mikrotik.cliente_id && (
+                            <span className="text-xs text-gray-400">
+                              {clientes.find(c => c.id === mikrotik.cliente_id)?.email}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                  )}
                   
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">
-                        {clientes.find(c => c.id === mikrotik.cliente_id)?.nome || 'Desconhecido'}
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <span className="font-semibold text-emerald-600">
+                        {mikrotik.profitpercentage}%
                       </span>
                     </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <span className="text-sm text-gray-900">{mikrotik.provider_name}</span>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <span className="font-semibold text-emerald-600">
-                      {mikrotik.profitpercentage}%
-                    </span>
                   </TableCell>
                   
                   <TableCell>
@@ -723,20 +670,53 @@ const MikrotiksManagement = () => {
                           onClick={() => {
                             setSelectedMikrotik(mikrotik);
                             setShowPlansModal(true);
+                            clearMessages();
                           }}
                         >
                           <Settings className="w-4 h-4 mr-2" />
                           Gerenciar Planos
                         </DropdownMenuItem>
+                        
+                        {currentUser?.role === 'admin' && (
+                          <>
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                setLinkingMikrotik(mikrotik);
+                                setShowLinkClientModal(true);
+                                clearMessages();
+                              }}
+                            >
+                              <Users className="w-4 h-4 mr-2" />
+                              {mikrotik.cliente_id ? 'Alterar Cliente' : 'Vincular Cliente'}
+                            </DropdownMenuItem>
+                            
+                            {mikrotik.cliente_id && (
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  if (confirm('Tem certeza que deseja desvincular este cliente?')) {
+                                    handleUnlinkClient(mikrotik.id);
+                                  }
+                                }}
+                                className="text-orange-600"
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Desvincular Cliente
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                        
                         <DropdownMenuItem 
                           onClick={() => {
                             setEditingMikrotik(mikrotik);
                             setFormData({
                               nome: mikrotik.nome,
-                              provider_name: mikrotik.provider_name,
-                              cliente_id: mikrotik.cliente_id,
-                              profitpercentage: mikrotik.profitpercentage
+                              provider_name: mikrotik.provider_name || '',
+                              profitpercentage: mikrotik.profitpercentage,
+                              status: mikrotik.status,
+                              cliente_id: mikrotik.cliente_id || ''
                             });
+                            clearMessages();
                             setShowAddModal(true);
                           }}
                         >
@@ -760,95 +740,106 @@ const MikrotiksManagement = () => {
           
           {filteredMikrotiks.length === 0 && (
             <div className="text-center py-12">
-              <Radio className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">Nenhum mikrotik encontrado</p>
+              <Router className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">Nenhum MikroTik encontrado</p>
               <p className="text-gray-400 text-sm mt-1">
-                {searchTerm ? 'Tente ajustar sua busca' : 'Clique em "Novo Mikrotik" para começar'}
+                {searchTerm ? 'Tente ajustar sua busca' : 'Clique em "Novo MikroTik" para começar'}
               </p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Mikrotik Modal */}
+      {/* MikroTik Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingMikrotik ? 'Editar Mikrotik' : 'Novo Mikrotik'}
+              {editingMikrotik ? 'Editar MikroTik' : 'Novo MikroTik'}
             </DialogTitle>
             <DialogDescription>
-              {editingMikrotik ? 'Atualize as informações do equipamento' : 'Configure um novo equipamento Mikrotik'}
+              {editingMikrotik ? 'Atualize as informações do equipamento' : 'Configure um novo equipamento MikroTik'}
             </DialogDescription>
           </DialogHeader>
           
           <form onSubmit={editingMikrotik ? handleUpdateMikrotik : handleCreateMikrotik} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="nome">Nome do Mikrotik</Label>
+                <Label htmlFor="nome">Nome do MikroTik</Label>
                 <Input
                   id="nome"
                   required
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  placeholder="Ex: Mikrotik Central"
+                  placeholder="Ex: MikroTik Central"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="provider">Nome do Provedor</Label>
+                <Label htmlFor="provider_name">Nome do Provedor</Label>
                 <Input
-                  id="provider"
-                  required
+                  id="provider_name"
                   value={formData.provider_name}
                   onChange={(e) => setFormData({ ...formData, provider_name: e.target.value })}
-                  placeholder="Ex: Provider Central"
+                  placeholder="Ex: Internet Central"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cliente">Proprietário</Label>
-                <Select 
-                  value={formData.cliente_id} 
-                  onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um usuário..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map(cliente => (
-                      <SelectItem key={cliente.id} value={cliente.id}>
-                        {cliente.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="profit">Porcentagem de Lucro Admin (%)</Label>
+                <Label htmlFor="profitpercentage">Porcentagem de Lucro (%)</Label>
                 <Input
-                  id="profit"
+                  id="profitpercentage"
                   type="number"
                   min="0"
                   max="100"
-                  required
                   value={formData.profitpercentage}
-                  onChange={(e) => setFormData({ ...formData, profitpercentage: Number(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, profitpercentage: parseFloat(e.target.value) })}
                   placeholder="Ex: 10"
                 />
-                <p className="text-xs text-gray-500">
-                  Restante vai para o proprietário do mikrotik
-                </p>
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Ativo">Ativo</SelectItem>
+                    <SelectItem value="Inativo">Inativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {currentUser?.role === 'admin' && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="cliente_id">Vincular a Cliente (opcional)</Label>
+                  <Select value={formData.cliente_id} onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um cliente ou deixe em branco para sistema" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Sistema (sem vinculação)</SelectItem>
+                      {clientes.filter(c => c.role === 'user').map((cliente) => (
+                        <SelectItem key={cliente.id} value={cliente.id}>
+                          {cliente.nome} ({cliente.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             
             <DialogFooter className="gap-2">
               <Button 
                 type="button" 
                 variant="outline" 
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingMikrotik(null);
+                  resetForm();
+                }}
               >
                 Cancelar
               </Button>
@@ -864,140 +855,134 @@ const MikrotiksManagement = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Plans Management Modal */}
+      {/* Plans Modal */}
       <Dialog open={showPlansModal} onOpenChange={setShowPlansModal}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-purple-600" />
+            <DialogTitle>
               Gerenciar Planos - {selectedMikrotik?.nome}
             </DialogTitle>
             <DialogDescription>
-              Configure os planos de internet para este equipamento
+              Configure os planos de internet disponíveis para este equipamento
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
-            <Button
-              onClick={() => setShowAddPlanModal(true)}
-              className="gap-2 bg-purple-600 hover:bg-purple-700"
-            >
-              <Plus className="w-4 h-4" />
-              Novo Plano
-            </Button>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {plans.map((plan) => (
-                <Card key={plan.id} className="border border-gray-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold text-gray-900">{plan.nome}</h3>
-                      <span className="text-lg font-bold text-green-600">
-                        {formatCurrency(plan.preco)}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mb-3">
-                      <Wifi className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">
-                        Senhas: <span className="font-bold">{senhaCounts[plan.id] || 0}</span>
-                      </span>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => {
-                          setEditingPlan(plan);
-                          setPlanFormData({
-                            nome: plan.nome,
-                            preco: plan.preco.toString()
-                          });
-                          setShowAddPlanModal(true);
-                        }}
-                      >
-                        <Edit className="w-3 h-3 mr-1" />
-                        Editar
-                      </Button>
-                      
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => {
-                          setImportPlan(plan);
-                          setShowImportModal(true);
-                        }}
-                      >
-                        <Upload className="w-3 h-3 mr-1" />
-                        Importar
-                      </Button>
-                      
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeletePlan(plan)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="flex justify-between items-center">
+              <h4 className="text-lg font-medium">Planos Cadastrados</h4>
+              <Button 
+                onClick={() => {
+                  setShowAddPlanModal(true);
+                  clearMessages();
+                }}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Plano
+              </Button>
             </div>
             
-            {plans.length === 0 && (
-              <div className="text-center py-8">
-                <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 font-medium">Nenhum plano cadastrado</p>
-                <p className="text-gray-400 text-sm mt-1">
-                  Clique em "Novo Plano" para começar
-                </p>
-              </div>
-            )}
+            <div className="space-y-3">
+              {plans.map((plan) => (
+                <div key={plan.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h5 className="font-medium">{plan.nome}</h5>
+                    <p className="text-sm text-gray-600">
+                      R$ {plan.preco.toFixed(2)} - {plan.duracao} minuto{plan.duracao !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingPlan(plan);
+                        setPlanFormData({
+                          nome: plan.nome,
+                          preco: plan.preco.toString(),
+                          duracao: plan.duracao
+                        });
+                        clearMessages();
+                        setShowAddPlanModal(true);
+                      }}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeletePlan(plan)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              
+              {plans.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <Settings className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhum plano cadastrado</p>
+                  <p className="text-sm">Clique em "Novo Plano" para começar</p>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Plan Modal */}
+      {/* Add Plan Modal */}
       <Dialog open={showAddPlanModal} onOpenChange={setShowAddPlanModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {editingPlan ? 'Editar Plano' : 'Novo Plano'}
             </DialogTitle>
             <DialogDescription>
-              {editingPlan ? 'Atualize as informações do plano' : `Criar novo plano para ${selectedMikrotik?.nome}`}
+              {editingPlan ? 'Atualize as informações do plano' : 'Cadastre um novo plano de internet'}
             </DialogDescription>
           </DialogHeader>
           
           <form onSubmit={editingPlan ? handleUpdatePlan : handleCreatePlan} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="planName">Nome do Plano</Label>
+              <Label htmlFor="planNome">Nome do Plano</Label>
               <Input
-                id="planName"
+                id="planNome"
                 required
                 value={planFormData.nome}
                 onChange={(e) => setPlanFormData({ ...planFormData, nome: e.target.value })}
-                placeholder="Ex: Plano 100MB"
+                placeholder="Ex: 1 Hora Premium"
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="planPrice">Preço (R$)</Label>
-              <Input
-                id="planPrice"
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                value={planFormData.preco}
-                onChange={(e) => setPlanFormData({ ...planFormData, preco: e.target.value })}
-                placeholder="Ex: 29.90"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="planPreco">Preço (R$)</Label>
+                <Input
+                  id="planPreco"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={planFormData.preco}
+                  onChange={(e) => setPlanFormData({ ...planFormData, preco: e.target.value })}
+                  placeholder="Ex: 5.00"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="planDuracao">Duração (minutos)</Label>
+                <Input
+                  id="planDuracao"
+                  type="number"
+                  min="1"
+                  required
+                  value={planFormData.duracao}
+                  onChange={(e) => setPlanFormData({ ...planFormData, duracao: parseInt(e.target.value) })}
+                  placeholder="Ex: 60"
+                />
+              </div>
             </div>
             
             <DialogFooter className="gap-2">
@@ -1007,7 +992,7 @@ const MikrotiksManagement = () => {
                 onClick={() => {
                   setShowAddPlanModal(false);
                   setEditingPlan(null);
-                  setPlanFormData({ nome: '', preco: '' });
+                  setPlanFormData({ nome: '', preco: '', duracao: 60 });
                 }}
               >
                 Cancelar
@@ -1015,7 +1000,7 @@ const MikrotiksManagement = () => {
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="bg-purple-600 hover:bg-purple-700"
+                className="bg-blue-600 hover:bg-blue-700"
               >
                 {loading ? 'Processando...' : (editingPlan ? 'Atualizar' : 'Criar')}
               </Button>
@@ -1024,32 +1009,46 @@ const MikrotiksManagement = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Import Passwords Modal */}
-      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-        <DialogContent className="sm:max-w-md">
+      {/* Link Client Modal */}
+      <Dialog open={showLinkClientModal} onOpenChange={setShowLinkClientModal}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-orange-600" />
-              Importar Senhas
+            <DialogTitle>
+              Vincular Cliente - {linkingMikrotik?.nome}
             </DialogTitle>
             <DialogDescription>
-              Importar senhas para o plano: {importPlan?.nome}
+              Selecione um cliente para vincular ao MikroTik ou deixe em branco para sistema
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const clienteId = formData.get('cliente_id') as string;
+              if (linkingMikrotik) {
+                handleLinkClient(linkingMikrotik.id, clienteId);
+              }
+            }} 
+            className="space-y-4"
+          >
             <div className="space-y-2">
-              <Label htmlFor="passwords">Senhas (uma por linha)</Label>
-              <Textarea
-                id="passwords"
-                rows={10}
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder="senha1&#10;senha2&#10;senha3&#10;..."
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-gray-500">
-                Cole as senhas, uma por linha
+              <Label htmlFor="cliente_id">Cliente</Label>
+              <Select name="cliente_id" defaultValue={linkingMikrotik?.cliente_id || ''}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um cliente ou deixe em branco para sistema" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sistema (sem vinculação)</SelectItem>
+                  {clientes.filter(c => c.role === 'user').map((cliente) => (
+                    <SelectItem key={cliente.id} value={cliente.id}>
+                      {cliente.nome} ({cliente.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-gray-500">
+                Clientes vinculados poderão gerenciar os planos deste MikroTik
               </p>
             </div>
             
@@ -1058,22 +1057,21 @@ const MikrotiksManagement = () => {
                 type="button" 
                 variant="outline" 
                 onClick={() => {
-                  setShowImportModal(false);
-                  setImportPlan(null);
-                  setImportText('');
+                  setShowLinkClientModal(false);
+                  setLinkingMikrotik(null);
                 }}
               >
                 Cancelar
               </Button>
               <Button 
-                onClick={handleImportPasswords}
-                disabled={importLoading || !importText.trim()}
-                className="bg-orange-600 hover:bg-orange-700"
+                type="submit" 
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700"
               >
-                {importLoading ? 'Importando...' : 'Importar Senhas'}
+                {loading ? 'Processando...' : 'Salvar Vinculação'}
               </Button>
             </DialogFooter>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

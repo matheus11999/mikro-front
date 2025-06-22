@@ -16,7 +16,8 @@ import {
   Zap,
   PieChart,
   LineChart,
-  Percent
+  Percent,
+  Router
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,7 +41,6 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabaseClient';
-import { useLogger } from '@/lib/logger';
 
 interface Venda {
   id: string;
@@ -52,6 +52,8 @@ interface Venda {
   lucro: number;
   status: string;
   data: string;
+  pagamento_gerado_em?: string;
+  pagamento_aprovado_em?: string;
   planos?: { nome: string };
   mikrotiks?: { nome: string };
 }
@@ -80,7 +82,6 @@ interface TopMikrotik {
 }
 
 const ReportsManagement = () => {
-  const log = useLogger('ReportsManagement');
   const [dateRange, setDateRange] = useState('month');
   const [reportType, setReportType] = useState('general');
   const [startDate, setStartDate] = useState('');
@@ -103,12 +104,7 @@ const ReportsManagement = () => {
   const [currentUser, setCurrentUser] = useState<Cliente | null>(null);
 
   useEffect(() => {
-    log.mount();
     initializeData();
-    
-    return () => {
-      log.unmount();
-    };
   }, []);
 
   useEffect(() => {
@@ -122,14 +118,9 @@ const ReportsManagement = () => {
   };
 
   const getCurrentUser = async () => {
-    const timerId = log.startTimer('get-current-user');
-    
     try {
-      log.info('Getting current user');
-      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        log.warn('User not authenticated');
         setLoading(false);
         return;
       }
@@ -141,7 +132,7 @@ const ReportsManagement = () => {
         .single();
 
       if (error) {
-        log.error('Failed to fetch user data', error);
+        console.error('Failed to fetch user data', error);
         setError('Erro ao carregar dados do usuário');
         setLoading(false);
         return;
@@ -149,31 +140,25 @@ const ReportsManagement = () => {
 
       if (cliente) {
         setCurrentUser(cliente);
-        log.info('User loaded successfully', { role: cliente.role });
       }
     } catch (err) {
-      log.error('Failed to get current user', err);
+      console.error('Failed to get current user', err);
       setError('Erro ao carregar usuário');
       setLoading(false);
-    } finally {
-      log.endTimer(timerId, 'get-current-user');
     }
   };
 
   const fetchSalesData = async () => {
     if (!currentUser) return;
     
-    const timerId = log.startTimer('fetch-sales-data');
-    
     try {
-      log.info('Fetching sales data');
       setLoading(true);
       setError('');
       
       let query;
 
       if (currentUser.role === 'admin') {
-        // Admin vê todas as vendas
+        // Admin vê todas as vendas (aprovadas, pendentes, canceladas)
         query = supabase
           .from('vendas')
           .select(`
@@ -181,7 +166,6 @@ const ReportsManagement = () => {
             planos!inner(nome),
             mikrotiks!inner(nome)
           `)
-          .eq('status', 'aprovado')
           .order('data', { ascending: false });
       } else {
         // Usuário normal: buscar vendas de todos os mikrotiks vinculados a ele
@@ -191,7 +175,6 @@ const ReportsManagement = () => {
           .eq('cliente_id', currentUser.id);
 
         if (!userMikrotiks || userMikrotiks.length === 0) {
-          log.info('No mikrotiks found for user');
           setSalesData([]);
           setStats({
             todayTotal: 0,
@@ -209,7 +192,6 @@ const ReportsManagement = () => {
         }
 
         const mikrotikIds = userMikrotiks.map(m => m.id);
-        log.info('User mikrotiks found', { count: mikrotikIds.length });
 
         query = supabase
           .from('vendas')
@@ -218,131 +200,96 @@ const ReportsManagement = () => {
             planos!inner(nome),
             mikrotiks!inner(nome)
           `)
-          .eq('status', 'aprovado')
           .in('mikrotik_id', mikrotikIds)
           .order('data', { ascending: false });
       }
 
-      // Aplicar filtro de data
-      if (dateRange !== 'all') {
-        const hoje = new Date();
-        let startFilter: Date;
-
-        switch (dateRange) {
-          case 'today':
-            startFilter = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-            break;
-          case 'week':
-            startFilter = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case 'month':
-            startFilter = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            break;
-          default:
-            startFilter = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-        }
-
-        query = query.gte('data', startFilter.toISOString());
+      // Aplicar filtros de data se necessário
+      if (dateRange === 'today') {
+        const today = new Date().toISOString().split('T')[0];
+        query = query.gte('data', today + 'T00:00:00').lte('data', today + 'T23:59:59');
+      } else if (dateRange === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        query = query.gte('data', weekAgo.toISOString());
+      } else if (dateRange === 'month') {
+        const monthAgo = new Date();
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        query = query.gte('data', monthAgo.toISOString());
+      } else if (dateRange === 'custom' && startDate && endDate) {
+        query = query.gte('data', startDate + 'T00:00:00').lte('data', endDate + 'T23:59:59');
       }
 
-      // Aplicar filtro personalizado se definido
-      if (startDate && endDate) {
-        query = query
-          .gte('data', new Date(startDate).toISOString())
-          .lte('data', new Date(endDate + 'T23:59:59').toISOString());
-      }
-
-      const { data, error } = await query.limit(500);
+      const { data, error } = await query;
 
       if (error) {
-        log.error('Failed to fetch sales data', error);
-        throw error;
+        console.error('Failed to fetch sales data', error);
+        setError('Erro ao carregar dados de vendas');
+        return;
       }
 
-      log.info('Sales data fetched successfully', { count: data?.length });
       setSalesData(data || []);
       calculateStats(data || []);
       calculateTopMikrotiks(data || []);
-
+      
     } catch (err) {
-      log.error('Failed to fetch sales data', err);
+      console.error('Failed to fetch sales data', err);
       setError('Erro ao carregar dados de vendas');
-      setSalesData([]);
-      setStats({
-        todayTotal: 0,
-        todaySales: 0,
-        weekTotal: 0,
-        weekSales: 0,
-        monthTotal: 0,
-        monthSales: 0,
-        totalTransactions: 0,
-        averageTicket: 0
-      });
-      setTopMikrotiks([]);
     } finally {
       setLoading(false);
-      log.endTimer(timerId, 'fetch-sales-data');
     }
   };
 
   const calculateStats = (vendas: Venda[]) => {
-    const hoje = new Date();
-    const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-    const inicioSemana = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
 
-    // Vendas de hoje
-    const vendasHoje = vendas.filter(v => new Date(v.data) >= inicioHoje);
-    const todayTotal = vendasHoje.reduce((sum, v) => sum + Number(v.preco || 0), 0);
+    // Apenas vendas aprovadas para cálculos de estatísticas
+    const vendasAprovadas = vendas.filter(v => v.status === 'aprovado');
+    
+    const todayVendas = vendasAprovadas.filter(v => new Date(v.data) >= today);
+    const weekVendas = vendasAprovadas.filter(v => new Date(v.data) >= weekAgo);
+    const monthVendas = vendasAprovadas.filter(v => new Date(v.data) >= monthAgo);
 
-    // Vendas da semana
-    const vendasSemana = vendas.filter(v => new Date(v.data) >= inicioSemana);
-    const weekTotal = vendasSemana.reduce((sum, v) => sum + Number(v.preco || 0), 0);
-
-    // Vendas do mês
-    const vendasMes = vendas.filter(v => new Date(v.data) >= inicioMes);
-    const monthTotal = vendasMes.reduce((sum, v) => sum + Number(v.preco || 0), 0);
-
-    // Total geral
-    const totalValue = vendas.reduce((sum, v) => sum + Number(v.preco || 0), 0);
-    const averageTicket = vendas.length > 0 ? totalValue / vendas.length : 0;
+    const totalRevenue = vendasAprovadas.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0);
 
     setStats({
-      todayTotal,
-      todaySales: vendasHoje.length,
-      weekTotal,
-      weekSales: vendasSemana.length,
-      monthTotal,
-      monthSales: vendasMes.length,
-      totalTransactions: vendas.length,
-      averageTicket
+      todayTotal: todayVendas.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0),
+      todaySales: todayVendas.length,
+      weekTotal: weekVendas.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0),
+      weekSales: weekVendas.length,
+      monthTotal: monthVendas.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0),
+      monthSales: monthVendas.length,
+      totalTransactions: vendasAprovadas.length,
+      averageTicket: vendasAprovadas.length > 0 ? totalRevenue / vendasAprovadas.length : 0
     });
   };
 
   const calculateTopMikrotiks = (vendas: Venda[]) => {
-    const mikrotikStats = vendas.reduce((acc, sale) => {
-      const mikrotikName = sale.mikrotiks?.nome || 'N/A';
-      if (!acc[mikrotikName]) {
-        acc[mikrotikName] = { sales: 0, transactions: 0 };
+    const mikrotikSales: Record<string, { name: string; sales: number; transactions: number }> = {};
+
+    vendas.forEach(venda => {
+      const mikrotikName = venda.mikrotiks?.nome || 'Desconhecido';
+      if (!mikrotikSales[mikrotikName]) {
+        mikrotikSales[mikrotikName] = { name: mikrotikName, sales: 0, transactions: 0 };
       }
-      acc[mikrotikName].sales += Number(sale.preco || 0);
-      acc[mikrotikName].transactions += 1;
-      return acc;
-    }, {} as Record<string, { sales: number; transactions: number }>);
+      mikrotikSales[mikrotikName].sales += (venda.preco || venda.valor || 0);
+      mikrotikSales[mikrotikName].transactions += 1;
+    });
 
-    const totalSales = Object.values(mikrotikStats).reduce((sum, stat) => sum + stat.sales, 0);
+    const totalSales = Object.values(mikrotikSales).reduce((sum, m) => sum + m.sales, 0);
 
-    const top = Object.entries(mikrotikStats)
-      .map(([name, stats]) => ({
-        name,
-        sales: stats.sales,
-        transactions: stats.transactions,
-        percentage: totalSales > 0 ? (stats.sales / totalSales) * 100 : 0
+    const topList = Object.values(mikrotikSales)
+      .map(m => ({
+        ...m,
+        percentage: totalSales > 0 ? (m.sales / totalSales) * 100 : 0
       }))
       .sort((a, b) => b.sales - a.sales)
       .slice(0, 5);
 
-    setTopMikrotiks(top);
+    setTopMikrotiks(topList);
   };
 
   const handleFilter = () => {
@@ -354,19 +301,15 @@ const ReportsManagement = () => {
     setReportType('general');
     setStartDate('');
     setEndDate('');
-    setTimeout(() => {
-      fetchSalesData();
-    }, 100);
+    fetchSalesData();
   };
 
   const exportToExcel = () => {
-    setSuccess('Funcionalidade de exportação será implementada em breve');
-    log.info('Export to Excel requested');
+    setSuccess('Funcionalidade de exportação para Excel será implementada em breve');
   };
 
   const generatePDF = () => {
-    setSuccess('Funcionalidade de PDF será implementada em breve');
-    log.info('PDF generation requested');
+    setSuccess('Funcionalidade de geração de PDF será implementada em breve');
   };
 
   const formatCurrency = (value: number) => {
@@ -389,17 +332,48 @@ const ReportsManagement = () => {
   const getDateRangeText = () => {
     switch (dateRange) {
       case 'today': return 'Hoje';
-      case 'week': return 'Esta Semana';
-      case 'month': return 'Este Mês';
-      case 'custom': return startDate && endDate ? `${startDate} a ${endDate}` : 'Personalizado';
-      case 'all': return 'Todos os Períodos';
-      default: return 'Este Mês';
+      case 'week': return 'Últimos 7 dias';
+      case 'month': return 'Último mês';
+      case 'custom': return `${startDate} até ${endDate}`;
+      default: return 'Todos os períodos';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'aprovado':
+        return (
+          <Badge className="bg-green-100 text-green-800 border-green-200">
+            <CheckCircle2 className="w-3 h-3 mr-1" />
+            Aprovado
+          </Badge>
+        );
+      case 'pendente':
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            Pendente
+          </Badge>
+        );
+      case 'cancelado':
+        return (
+          <Badge className="bg-red-100 text-red-800 border-red-200">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            Cancelado
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary">
+            {status}
+          </Badge>
+        );
     }
   };
 
   if (loading && !salesData.length) {
     return (
-      <div className="space-y-6">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Card key={i} className="animate-pulse">
@@ -415,7 +389,7 @@ const ReportsManagement = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -597,188 +571,127 @@ const ReportsManagement = () => {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid gap-6 md:grid-cols-4">
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total do Período</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.monthTotal)}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total de Transações</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalTransactions}</p>
-              </div>
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <BarChart3 className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Ticket Médio</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.averageTicket)}</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <LineChart className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Mikrotiks Ativos</p>
-                <p className="text-2xl font-bold text-gray-900">{topMikrotiks.length}</p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Zap className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Sales Table */}
-        <Card className="lg:col-span-2 border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              Vendas Detalhadas ({salesData.length})
-            </CardTitle>
-            <CardDescription>
-              Histórico completo de transações do período selecionado
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-100">
-                  <TableHead className="font-semibold">Data</TableHead>
-                  <TableHead className="font-semibold">Mikrotik</TableHead>
-                  <TableHead className="font-semibold">Plano</TableHead>
-                  <TableHead className="font-semibold">Valor</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {salesData.slice(0, 10).map((sale) => (
-                  <TableRow key={sale.id} className="hover:bg-gray-50">
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="w-4 h-4" />
-                        {formatDate(sale.data)}
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Zap className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <span className="text-sm font-medium">{sale.mikrotiks?.nome || 'N/A'}</span>
-                      </div>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <span className="text-sm text-gray-900">{sale.planos?.nome || 'N/A'}</span>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <span className="font-bold text-green-600">{formatCurrency(sale.preco)}</span>
-                    </TableCell>
-                    
-                    <TableCell>
-                      <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
-                        Aprovado
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            
-            {salesData.length === 0 && (
-              <div className="text-center py-12">
-                <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 font-medium">Nenhuma venda encontrada</p>
-                <p className="text-gray-400 text-sm mt-1">
-                  Ajuste os filtros para ver mais dados
-                </p>
-              </div>
-            )}
-            
-            {salesData.length > 10 && (
-              <div className="p-4 border-t border-gray-100 text-center">
-                <Button variant="outline" size="sm">
-                  Ver todas as {salesData.length} vendas
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Top Mikrotiks */}
+      <div className="grid gap-6 md:grid-cols-2">
         <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
+          <CardHeader>
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <PieChart className="w-5 h-5" />
+              <DollarSign className="w-5 h-5 text-green-600" />
+              Resumo Financeiro
+            </CardTitle>
+            <CardDescription>Métricas de performance de vendas</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-600">Total de Transações</span>
+              <span className="text-lg font-bold text-gray-900">{stats.totalTransactions}</span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-600">Ticket Médio</span>
+              <span className="text-lg font-bold text-green-600">{formatCurrency(stats.averageTicket)}</span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm font-medium text-gray-600">Total Geral</span>
+              <span className="text-lg font-bold text-blue-600">
+                {formatCurrency(salesData.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0))}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-blue-600" />
               Top Mikrotiks
             </CardTitle>
-            <CardDescription>
-              Equipamentos com melhor performance
-            </CardDescription>
+            <CardDescription>Equipamentos com melhor performance</CardDescription>
           </CardHeader>
-          
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {topMikrotiks.map((mikrotik, index) => (
               <div key={mikrotik.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-bold text-blue-600">#{index + 1}</span>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                    index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-orange-400'
+                  }`}>
+                    {index + 1}
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">{mikrotik.name}</p>
-                    <p className="text-xs text-gray-500">{mikrotik.transactions} vendas</p>
+                    <p className="text-sm text-gray-600">{mikrotik.transactions} transações</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-gray-900">{formatCurrency(mikrotik.sales)}</p>
-                  <div className="flex items-center gap-1">
-                    <Percent className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs text-gray-500">{mikrotik.percentage.toFixed(1)}%</span>
-                  </div>
+                  <p className="font-bold text-green-600">{formatCurrency(mikrotik.sales)}</p>
+                  <p className="text-sm text-gray-600">{mikrotik.percentage.toFixed(1)}%</p>
                 </div>
               </div>
             ))}
             
             {topMikrotiks.length === 0 && (
-              <div className="text-center py-8">
-                <PieChart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-sm">Nenhum dado disponível</p>
+              <div className="text-center py-8 text-gray-500">
+                <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum dado disponível</p>
+                <p className="text-sm">Vendas aparecerão aqui quando disponíveis</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Sales Table */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Transações Recentes</CardTitle>
+          <CardDescription>Últimas vendas realizadas no sistema</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Mikrotik</TableHead>
+                <TableHead>Plano</TableHead>
+                <TableHead>Valor</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {salesData.slice(0, 10).map((venda) => (
+                <TableRow key={venda.id}>
+                  <TableCell className="font-medium">
+                    {formatDate(venda.data)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Router className="w-4 h-4 text-gray-400" />
+                      {venda.mikrotiks?.nome || 'Desconhecido'}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {venda.planos?.nome || 'Desconhecido'}
+                  </TableCell>
+                  <TableCell className="font-semibold text-green-600">
+                    {formatCurrency(venda.preco || venda.valor || 0)}
+                  </TableCell>
+                  <TableCell>
+                    {getStatusBadge(venda.status)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          
+          {salesData.length === 0 && (
+            <div className="text-center py-12">
+              <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">Nenhuma venda encontrada</p>
+              <p className="text-gray-400 text-sm mt-1">
+                Vendas aparecerão aqui quando estiverem disponíveis
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
