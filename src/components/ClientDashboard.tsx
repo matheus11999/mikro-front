@@ -86,13 +86,9 @@ function DashboardContent() {
 
       console.log('DEBUG - User ID:', authUser.id);
 
-      // Primeiro tentar buscar cliente por ID, se não encontrar, buscar por email
-      let clienteRes = await supabase.from('clientes').select('*').eq('id', authUser.id).maybeSingle();
-      
-      if (!clienteRes.data) {
-        console.log('DEBUG - Cliente não encontrado por ID, buscando por email:', authUser.email);
-        clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
-      }
+      // Buscar cliente por email (mais confiável que ID do auth)
+      console.log('DEBUG - Buscando cliente por email:', authUser.email);
+      const clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
 
       const cliente = clienteRes.data;
       if (!cliente) {
@@ -515,13 +511,9 @@ function ClientMikrotiks() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) return;
 
-      // Primeiro buscar o cliente para obter o ID correto
-      let clienteRes = await supabase.from('clientes').select('id').eq('id', authUser.id).maybeSingle();
-      
-      if (!clienteRes.data) {
-        console.log('DEBUG - Cliente não encontrado por ID, buscando por email:', authUser.email);
-        clienteRes = await supabase.from('clientes').select('id').eq('email', authUser.email).maybeSingle();
-      }
+      // Buscar o cliente por email para obter o ID correto
+      console.log('DEBUG - Buscando cliente por email:', authUser.email);
+      const clienteRes = await supabase.from('clientes').select('id').eq('email', authUser.email).maybeSingle();
 
       const cliente = clienteRes.data;
       if (!cliente) {
@@ -1021,11 +1013,9 @@ function ClientReports() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) return;
 
-      // Buscar cliente
-      let clienteRes = await supabase.from('clientes').select('*').eq('id', authUser.id).maybeSingle();
-      if (!clienteRes.data) {
-        clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
-      }
+      // Buscar cliente por email
+      console.log('DEBUG - Buscando cliente por email:', authUser.email);
+      const clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
 
       const cliente = clienteRes.data;
       if (!cliente) return;

@@ -100,12 +100,12 @@ const App = () => {
     try {
       console.log('🔍 Buscando dados do usuário:', session.user.email);
       
-      // Timeout para evitar travamento
-      const userPromise = supabase
-        .from('usuarios')
-        .select('id, email, role, nome')
-        .eq('email', session.user.email)
-        .single();
+             // Timeout para evitar travamento
+       const userPromise = supabase
+         .from('clientes')
+         .select('id, email, role, nome')
+         .eq('email', session.user.email)
+         .single();
         
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout na busca do usuário')), 5000)
