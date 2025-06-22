@@ -80,26 +80,30 @@ function DashboardContent() {
     try {
       setLoading(true);
 
-      // Buscar dados do usuário atual
+      // Buscar dados do usuário atual de forma mais direta
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-
-      console.log('DEBUG - User ID:', authUser.id);
-
-      // Buscar cliente por email (mais confiável que ID do auth)
-      console.log('DEBUG - Buscando cliente por email:', authUser.email);
-      const clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
-
-      const cliente = clienteRes.data;
-      if (!cliente) {
-        console.error('Cliente não encontrado para o usuário:', authUser.email);
+      if (!authUser?.email) {
+        console.error('❌ Nenhum usuário autenticado');
         return;
       }
 
-      console.log('DEBUG - Cliente encontrado:', cliente);
+      console.log('🔍 DEBUG - Auth User Email:', authUser.email);
 
-      // Carregar dados usando o ID do cliente encontrado
-      const clienteId = cliente.id;
+      // Buscar cliente diretamente por email
+      const { data: cliente, error: clienteError } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('email', authUser.email)
+        .single();
+
+      console.log('🔍 DEBUG - Cliente query result:', { cliente, clienteError });
+
+      if (clienteError || !cliente) {
+        console.error('❌ Cliente não encontrado:', clienteError);
+        return;
+      }
+
+      console.log('✅ DEBUG - Cliente encontrado:', cliente);
 
       // Datas para cálculos
       const agora = new Date();
@@ -123,7 +127,7 @@ function DashboardContent() {
         macsRes,
         recentVendasRes
       ] = await Promise.all([
-        supabase.from('mikrotiks').select('id, nome, status').eq('cliente_id', clienteId).eq('status', 'Ativo'),
+        supabase.from('mikrotiks').select('id, nome, status').eq('cliente_id', cliente.id).eq('status', 'Ativo'),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado'),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
@@ -140,6 +144,8 @@ function DashboardContent() {
       const allVendasMes = vendasMesRes.data || [];
       const allMacs = macsRes.data || [];
       const allRecentVendas = recentVendasRes.data || [];
+
+      console.log('📊 DEBUG Dashboard - MikroTiks encontrados:', mikrotiks.length, mikrotiks);
 
       // Filtrar dados do usuário logado
       const userMikrotikIds = mikrotiks.map(m => m.id);
@@ -168,12 +174,8 @@ function DashboardContent() {
         userMikrotikIds.includes(venda.mikrotik_id)
       );
 
-      console.log('DEBUG - User MikroTiks:', mikrotiks);
-      console.log('DEBUG - User MikroTik IDs:', userMikrotikIds);
-      console.log('DEBUG - User vendas todas:', userVendasTodas.length);
-      console.log('DEBUG - User vendas hoje:', userVendasHoje.length);
-      console.log('DEBUG - User vendas semana:', userVendasSemana.length);
-      console.log('DEBUG - User vendas mês:', userVendasMes.length);
+      console.log('📊 DEBUG Dashboard - User MikroTik IDs:', userMikrotikIds);
+      console.log('📊 DEBUG Dashboard - User vendas todas:', userVendasTodas.length);
 
       // Calcular receita total e lucros por período (valor = parte do cliente)
       const receitaTotal = userVendasTodas.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
@@ -199,7 +201,7 @@ function DashboardContent() {
       setRecentSales(userRecentVendas);
 
     } catch (error) {
-      console.error('Erro ao carregar dados do cliente:', error);
+      console.error('❌ Erro ao carregar dados do dashboard:', error);
     } finally {
       // Garantir que loading seja sempre false no final
       setTimeout(() => setLoading(false), 100);
@@ -508,51 +510,107 @@ function ClientMikrotiks() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
+      
+      // Buscar dados do usuário atual com fallback
+      let userEmail = null;
 
-      // Buscar o cliente por email para obter o ID correto
-      console.log('DEBUG - Buscando cliente por email:', authUser.email);
-      const clienteRes = await supabase.from('clientes').select('id').eq('email', authUser.email).maybeSingle();
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        userEmail = authUser?.email;
+        console.log('🔍 DEBUG - Auth User via getUser():', userEmail);
+      } catch (authError) {
+        console.warn('⚠️ Erro ao buscar usuário via getUser():', authError);
+      }
 
-      const cliente = clienteRes.data;
-      if (!cliente) {
-        console.error('Cliente não encontrado para o usuário:', authUser.email);
+      // Fallback: tentar buscar da sessão
+      if (!userEmail) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          userEmail = session?.user?.email;
+          console.log('🔍 DEBUG - Auth User via getSession():', userEmail);
+        } catch (sessionError) {
+          console.warn('⚠️ Erro ao buscar sessão:', sessionError);
+        }
+      }
+
+      if (!userEmail) {
+        console.error('❌ Nenhum usuário autenticado encontrado');
+        setMikrotiks([]);
+        setPlanos([]);
         return;
       }
 
-      const clienteId = cliente.id;
+      console.log('✅ DEBUG - Email do usuário:', userEmail);
 
-      // Buscar os mikrotiks do usuário com informações detalhadas
-      const mikrotiksRes = await supabase
+      // Buscar cliente diretamente por email
+      const { data: cliente, error: clienteError } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('email', userEmail)
+        .single();
+
+      console.log('🔍 DEBUG - Cliente query result:', { cliente, clienteError });
+
+      if (clienteError || !cliente) {
+        console.error('❌ Cliente não encontrado:', clienteError);
+        setMikrotiks([]);
+        setPlanos([]);
+        return;
+      }
+
+      console.log('✅ DEBUG - Cliente encontrado:', cliente);
+
+      // Buscar mikrotiks do cliente
+      const { data: mikrotiks, error: mikrotiksError } = await supabase
         .from('mikrotiks')
-        .select('*, planos(id, nome, preco, duracao)')
-        .eq('cliente_id', clienteId)
+        .select('*')
+        .eq('cliente_id', cliente.id)
         .order('criado_em', { ascending: false });
 
-      const mikrotiks = mikrotiksRes.data || [];
-      
-      // Buscar todos os planos dos mikrotiks do usuário
-      const mikrotiksIds = mikrotiks.map(m => m.id);
-      const planosRes = mikrotiksIds.length > 0 
-        ? await supabase
-            .from('planos')
-            .select('*, mikrotiks(nome)')
-            .in('mikrotik_id', mikrotiksIds)
-            .order('criado_em', { ascending: false })
-        : { data: [] };
+      console.log('🔍 DEBUG - Mikrotiks query:', { 
+        cliente_id: cliente.id, 
+        mikrotiks, 
+        mikrotiksError,
+        count: mikrotiks?.length || 0
+      });
 
-      console.log('DEBUG - Cliente ID usado:', clienteId);
-      console.log('DEBUG - MikroTiks encontrados:', mikrotiks.length, mikrotiks);
-      console.log('DEBUG - Planos:', planosRes.data);
-      
-      // Debug da query de mikrotiks
-      console.log('DEBUG - Query mikrotiks result:', mikrotiksRes.error, mikrotiksRes.data);
+      if (mikrotiksError) {
+        console.error('❌ Erro ao buscar mikrotiks:', mikrotiksError);
+        setMikrotiks([]);
+        setPlanos([]);
+        return;
+      }
 
-      setMikrotiks(mikrotiks);
-      setPlanos(planosRes.data || []);
+      const mikrotiksData = mikrotiks || [];
+      console.log('📊 DEBUG - MikroTiks encontrados:', mikrotiksData.length, mikrotiksData);
+
+      // Buscar planos para os mikrotiks encontrados
+      let planosData = [];
+      if (mikrotiksData.length > 0) {
+        const mikrotiksIds = mikrotiksData.map(m => m.id);
+        const { data: planos, error: planosError } = await supabase
+          .from('planos')
+          .select('*')
+          .in('mikrotik_id', mikrotiksIds)
+          .order('criado_em', { ascending: false });
+
+        console.log('🔍 DEBUG - Planos query:', { mikrotiksIds, planos, planosError });
+
+        if (!planosError) {
+          planosData = planos || [];
+        }
+      }
+
+      console.log('📊 DEBUG - Planos encontrados:', planosData.length, planosData);
+
+      // Atualizar estados
+      setMikrotiks(mikrotiksData);
+      setPlanos(planosData);
+
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error('❌ Erro geral ao carregar dados:', error);
+      setMikrotiks([]);
+      setPlanos([]);
     } finally {
       // Garantir que loading seja sempre false no final
       setTimeout(() => setLoading(false), 100);
@@ -725,15 +783,8 @@ function ClientMikrotiks() {
                           <h3 className="text-lg font-bold text-gray-900">{mikrotik.nome}</h3>
                         )}
                         <div className="flex items-center space-x-3 mt-1">
-                          <div className="flex items-center space-x-1">
-                            <div className={`w-2 h-2 rounded-full ${mikrotik.status === 'Ativo' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <span className="text-sm font-medium text-gray-600">{mikrotik.status}</span>
-                          </div>
-                          {mikrotik.provider_name && (
-                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                              {mikrotik.provider_name}
-                            </span>
-                          )}
+                          <div className={`w-2 h-2 rounded-full ${mikrotik.status === 'Ativo' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <span className="text-sm font-medium text-gray-600">{mikrotik.status}</span>
                         </div>
                       </div>
                     </div>
@@ -984,8 +1035,6 @@ function ClientMikrotiks() {
     </div>
   );
 }
-
-
 
 // Página de relatórios do cliente
 function ClientReports() {

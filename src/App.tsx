@@ -60,6 +60,7 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
   const initializingRef = useRef(false);
+  const [shouldShowLogin, setShouldShowLogin] = useState(false);
 
   // Função melhorada para verificar sessão persistida
   const checkPersistedSession = useCallback(async () => {
@@ -84,6 +85,17 @@ const App = () => {
 
       if (session?.user) {
         console.log('✅ Sessão encontrada:', session.user.email);
+        
+        // Verificar se a sessão não está expirada
+        const now = new Date().getTime();
+        const expiresAt = new Date(session.expires_at * 1000).getTime();
+        
+        if (expiresAt <= now) {
+          console.log('⚠️ Sessão expirada, removendo...');
+          await supabase.auth.signOut();
+          return null;
+        }
+        
         return session;
       } else {
         console.log('📝 Nenhuma sessão persistida');
@@ -162,6 +174,7 @@ const App = () => {
       initializingRef.current = true;
       setLoading(true);
       setError(null);
+      setShouldShowLogin(false); // Não mostrar login durante inicialização
 
       console.log('🚀 Inicializando aplicação...');
 
@@ -173,19 +186,23 @@ const App = () => {
         if (userData) {
           console.log('✅ Usuário autenticado:', userData.email, userData.role);
           setUser(userData);
+          setShouldShowLogin(false);
         } else {
           console.log('⚠️ Sessão inválida, fazendo logout...');
           await supabase.auth.signOut();
           setUser(null);
+          setShouldShowLogin(true);
         }
       } else {
         console.log('📝 Nenhuma sessão ativa');
         setUser(null);
+        setShouldShowLogin(true);
       }
       
     } catch (err: any) {
       console.error('❌ Erro na inicialização:', err);
       setError(err.message || 'Erro de conexão');
+      setShouldShowLogin(true);
     } finally {
       // Garantir que loading seja sempre false no final
       setTimeout(() => {
@@ -194,7 +211,7 @@ const App = () => {
         initializingRef.current = false;
       }, 100);
     }
-  }, [fetchUserData]);
+  }, [fetchUserData, checkPersistedSession]);
 
   // Inicialização da aplicação
   useEffect(() => {
@@ -239,22 +256,33 @@ const App = () => {
         if (event === 'SIGNED_OUT') {
           console.log('👋 Usuário deslogado');
           setUser(null);
+          setShouldShowLogin(true);
           setLoading(false);
         } else if (event === 'SIGNED_IN' && session?.user) {
           console.log('👤 Usuário logado:', session.user.email);
           setLoading(true);
+          setShouldShowLogin(false);
           const userData = await fetchUserData(session);
           if (userData) {
             setUser(userData);
+            setShouldShowLogin(false);
           } else {
             console.log('⚠️ Login inválido, fazendo logout...');
             await supabase.auth.signOut();
             setUser(null);
+            setShouldShowLogin(true);
           }
           setLoading(false);
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔄 Token renovado');
-          // Não fazer nada, apenas log
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          console.log('🔄 Token renovado para:', session.user.email);
+          // Verificar se o usuário ainda é válido
+          if (!user) {
+            const userData = await fetchUserData(session);
+            if (userData) {
+              setUser(userData);
+              setShouldShowLogin(false);
+            }
+          }
         } else if (event === 'INITIAL_SESSION') {
           console.log('🎯 Sessão inicial detectada');
           // Já tratado na inicialização
@@ -262,6 +290,7 @@ const App = () => {
       } catch (err: any) {
         console.error('❌ Erro no listener de auth:', err);
         setError(err.message || 'Erro de autenticação');
+        setShouldShowLogin(true);
         setLoading(false);
       }
     });
@@ -270,7 +299,7 @@ const App = () => {
       console.log('🧹 Removendo listener de autenticação');
       authListener.subscription.unsubscribe();
     };
-  }, [fetchUserData]);
+  }, [fetchUserData, user]);
 
   // Listener para quando o usuário volta para a aba (evita loading infinito)
   useEffect(() => {
@@ -333,13 +362,54 @@ const App = () => {
     initializeApp();
   };
 
-  // Mostrar loading apenas se não inicializou ainda ou está carregando
-  if (!initialized || loading) {
-    return <LoadingScreen />;
+  // Renderização principal
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+          <p className="text-sm text-gray-500 mt-2">Verificando autenticação</p>
+        </div>
+      </div>
+    );
   }
-  
+
   if (error) {
-    return <ErrorScreen error={error} onRetry={handleRetry} />;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">❌ Erro</div>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar login apenas quando necessário
+  if (!user && shouldShowLogin && initialized) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  // Mostrar loading se ainda não inicializou ou se tem usuário mas ainda carregando
+  if (!initialized || (user && loading)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
   }
 
   console.log('🎨 Renderizando app. Usuário:', user ? `${user.email} (${user.role})` : 'Não logado');
