@@ -9,6 +9,7 @@ import {
   Wifi
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { saveUserData } from '@/lib/authHelpers';
 
 interface User {
   id: string;
@@ -63,21 +64,31 @@ export default function Login({ onLogin }: LoginProps) {
 
         if (userData) {
           console.log('✅ Dados do usuário encontrados:', userData.email, userData.role);
-          onLogin({
+          const user = {
             id: userData.id,
             email: userData.email,
-            role: userData.role === 'admin' ? 'admin' : 'user',
+            role: (userData.role === 'admin' ? 'admin' : 'user') as 'admin' | 'user',
             name: userData.nome
-          });
+          };
+          
+          // Salvar dados do usuário
+          saveUserData(user);
+          
+          onLogin(user);
         } else if (authData.user.email === 'mateus11martins@gmail.com') {
           // Fallback para admin principal
           console.log('✅ Fallback admin para:', authData.user.email);
-          onLogin({
+          const user = {
             id: authData.user.id,
             email: authData.user.email,
-            role: 'admin',
+            role: 'admin' as const,
             name: 'Admin'
-          });
+          };
+          
+          // Salvar dados do usuário
+          saveUserData(user);
+          
+          onLogin(user);
         } else {
           console.error('❌ Usuário não encontrado no sistema:', authData.user.email);
           // Fazer logout se usuário não existe no sistema

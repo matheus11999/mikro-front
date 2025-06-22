@@ -208,4 +208,76 @@ VITE_SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 VITE_SUPABASE_SERVICE_ROLE=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6ZnVneGNzaW5hc3hyaGN3dmNwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDE4MjA1MSwiZXhwIjoyMDY1NzU4MDUxfQ.a8bDJlXu9njwn-PZ3Dg4Hf2FMmnWioxlagTfuSSezpg
 ```
 
-**Salve → Restart → Aguarde → Teste! 🚀** 
+**Salve → Restart → Aguarde → Teste! 🚀**
+
+---
+
+## 🆕 **Novas Funcionalidades (VPS Otimizado)**
+
+### ✅ **Melhorias Implementadas:**
+
+1. **🔍 Debug Automático**: Quando não há MikroTiks, aparece ferramenta de debug
+2. **⏱️ Timeouts Otimizados**: 8s para sessão, 12s para dados, 15s total
+3. **🔄 Retry Automático**: Até 2 tentativas em falhas de rede
+4. **🍪 Sessão Persistente**: Login não expira ao atualizar página
+5. **🚪 Logout Melhorado**: Limpa completamente a sessão e recarrega
+6. **📊 Logs Detalhados**: Console mostra cada passo da conexão
+
+### 🔧 **Como Usar o Debug:**
+
+1. **Faça login** com `mateus12martins@gmail.com`
+2. **Vá em "MikroTiks"** no menu lateral
+3. **Se aparecer "Nenhum MikroTik vinculado"**, role para baixo
+4. **Clique em "Testar Conexão"** no componente de debug
+5. **Analise os resultados** para identificar o problema
+
+### 📊 **Resultados Esperados no Debug:**
+
+```
+✅ 1. Auth getUser() - Result: { user: { email: "mateus12martins@gmail.com" } }
+✅ 2. Auth getSession() - Result: { session: { user: { email: "..." } } }
+✅ 3. Buscar cliente - Result: { id: "fe225152-...", email: "mateus12martins@gmail.com" }
+✅ 4. Buscar MikroTiks - Result: [{ id: "78957cd3-...", nome: "Drogaria" }]
+✅ 5. Buscar Planos - Result: [{ nome: "3 Horas", preco: "5" }, { nome: "1 Hora", preco: "0.1" }]
+✅ 6. Variáveis de Ambiente: { VITE_SUPABASE_URL: "https://...", ... }
+```
+
+### 🚨 **Se o Debug Mostrar Problemas:**
+
+#### **❌ Auth falhou:**
+- Verificar se usuário está logado
+- Tentar fazer logout/login novamente
+- Limpar cache do browser
+
+#### **❌ Cliente não encontrado:**
+- Verificar se email está correto no banco
+- Verificar se RLS está desabilitado
+- Conferir se tabela 'clientes' existe
+
+#### **❌ MikroTiks não encontrados:**
+- Verificar se `cliente_id` está correto
+- Conferir vinculação no banco de dados
+- Verificar se tabela 'mikrotiks' existe
+
+#### **❌ Variáveis faltando:**
+- Adicionar variáveis no EasyPanel
+- Reiniciar container
+- Aguardar rebuild
+
+---
+
+## 🎯 **Resolução do Problema "Nenhum MikroTik vinculado"**
+
+### **Dados Confirmados no Banco:**
+- ✅ Cliente: `mateus12martins@gmail.com` (ID: `fe225152-5593-44b0-b7d9-7f04ae6c5b1f`)
+- ✅ MikroTik: "Drogaria" (ID: `78957cd3-7096-4acd-970b-0aa0a768c555`)  
+- ✅ Planos: "3 Horas" (R$ 5,00) e "1 Hora" (R$ 0,10)
+
+### **Correções Aplicadas:**
+1. **Removido `order by criado_em`** (coluna pode não existir)
+2. **Adicionados logs detalhados** para debug
+3. **Timeouts otimizados** para VPS
+4. **Fallback de autenticação** (getUser + getSession)
+5. **Componente de debug** para identificar problemas
+
+**Agora o sistema deve funcionar corretamente no EasyPanel! 🚀** 

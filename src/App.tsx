@@ -4,16 +4,13 @@ import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import ClientDashboard from './components/ClientDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
-import { supabase, checkPersistedSession } from './lib/supabaseClient';
+import { supabase } from './lib/supabaseClient';
+import { checkAndRestoreSession, saveUserData, performLogout, UserData } from './lib/authHelpers';
 import { Wifi, AlertCircle, Loader2, Server } from 'lucide-react';
 import './App.css';
 
-interface User {
-  id: string;
-  email: string;
-  role: 'admin' | 'user';
-  name?: string;
-}
+// Usar UserData do authHelpers
+type User = UserData;
 
 // Detectar ambiente VPS/EasyPanel
 const isVPS = typeof window !== 'undefined' && (
@@ -110,106 +107,7 @@ const App = () => {
     });
   }, []);
 
-  // Função melhorada para verificar sessão persistida (otimizada para VPS)
-  const checkPersistedSession = useCallback(async () => {
-    try {
-      console.log('🔍 Verificando sessão persistida (VPS otimizado)...');
-      
-      // Timeout maior para VPS
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout na verificação de sessão')), VPS_CONFIG.sessionTimeout)
-      );
-      
-      const { data: { session }, error } = await Promise.race([
-        sessionPromise,
-        timeoutPromise
-      ]) as any;
-
-      if (error) {
-        console.error('❌ Erro ao verificar sessão:', error);
-        return null;
-      }
-
-      if (session?.user) {
-        console.log('✅ Sessão encontrada:', session.user.email);
-        
-        // Verificar se a sessão não está expirada
-        const now = new Date().getTime();
-        const expiresAt = new Date(session.expires_at * 1000).getTime();
-        
-        if (expiresAt <= now) {
-          console.log('⚠️ Sessão expirada, removendo...');
-          await supabase.auth.signOut();
-          return null;
-        }
-        
-        return session;
-      } else {
-        console.log('📝 Nenhuma sessão persistida');
-        return null;
-      }
-    } catch (err: any) {
-      console.error('❌ Erro na verificação de sessão:', err);
-      return null;
-    }
-  }, []);
-
-  // Função para buscar dados do usuário baseado na sessão (otimizada para VPS)
-  const fetchUserData = useCallback(async (session: any): Promise<User | null> => {
-    try {
-      console.log('🔍 Buscando dados do usuário (VPS):', session.user.email);
-      
-      // Timeout maior para VPS
-      const userPromise = supabase
-        .from('clientes')
-        .select('id, email, role, nome')
-        .eq('email', session.user.email)
-        .single();
-        
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout na busca do usuário')), VPS_CONFIG.userLookupTimeout)
-      );
-      
-      const { data: userData, error } = await Promise.race([
-        userPromise,
-        timeoutPromise
-      ]) as any;
-
-      if (error) {
-        console.error('❌ Erro ao buscar usuário:', error);
-        return null;
-      }
-
-      if (!userData) {
-        console.log('⚠️ Usuário não encontrado no banco de dados');
-        return null;
-      }
-
-      console.log('✅ Usuário encontrado (VPS):', userData.email, userData.role);
-      
-      // Validar sessão
-      const now = new Date().getTime();
-      const sessionTime = new Date(session.expires_at).getTime();
-      
-      if (sessionTime <= now) {
-        console.log('⚠️ Sessão expirada');
-        return null;
-      }
-
-      console.log('✅ Sessão válida confirmada (VPS):', userData.email);
-      
-      return {
-        id: userData.id,
-        email: userData.email,
-        role: userData.role,
-        name: userData.nome
-      };
-    } catch (err: any) {
-      console.error('❌ Erro ao buscar dados do usuário (VPS):', err);
-      return null;
-    }
-  }, []);
+  // Removidas funções antigas - agora usando authHelpers
 
   const initializeApp = useCallback(async () => {
     // Evitar múltiplas inicializações simultâneas
@@ -222,80 +120,40 @@ const App = () => {
       initializingRef.current = true;
       setLoading(true);
       setError(null);
-      setShouldShowLogin(false); // Não mostrar login durante inicialização
+      setShouldShowLogin(false);
 
       console.log('🚀 Inicializando aplicação (VPS otimizado)...');
 
-      // Timeout geral maior para VPS
-      const initPromise = (async () => {
-        // Usar a nova função de verificação de sessão
-        const session = await checkPersistedSession();
-
-        if (session?.user) {
-          const userData = await fetchUserData(session);
-          if (userData) {
-            console.log('✅ Usuário autenticado (VPS):', userData.email, userData.role);
-            setUser(userData);
-            setShouldShowLogin(false);
-          } else {
-            console.log('⚠️ Sessão inválida, fazendo logout...');
-            await supabase.auth.signOut();
-            setUser(null);
-            setShouldShowLogin(true);
-          }
-        } else {
-          console.log('📝 Nenhuma sessão ativa');
-          setUser(null);
-          setShouldShowLogin(true);
-        }
-      })();
-
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout na inicialização da aplicação')), VPS_CONFIG.initTimeout)
-      );
-
-      await Promise.race([initPromise, timeoutPromise]);
+      // Usar o novo sistema de autenticação
+      const userData = await checkAndRestoreSession();
+      
+      if (userData) {
+        console.log('✅ Usuário restaurado:', userData.email, userData.role);
+        setUser(userData);
+        setShouldShowLogin(false);
+      } else {
+        console.log('📝 Nenhuma sessão ativa');
+        setUser(null);
+        setShouldShowLogin(true);
+      }
 
       setInitialized(true);
-      console.log('✅ Aplicação inicializada com sucesso (VPS)');
+      console.log('✅ Aplicação inicializada com sucesso');
 
     } catch (err: any) {
       console.error('❌ Erro na inicialização:', err);
       
-      // Retry automático para VPS (até 2 tentativas)
-      if (retryCount < VPS_CONFIG.maxRetries && isVPS) {
-        console.log(`🔄 Tentativa ${retryCount + 1}/${VPS_CONFIG.maxRetries} em ${VPS_CONFIG.retryDelay}ms...`);
-        setRetryCount(prev => prev + 1);
-        setTimeout(() => {
-          initializingRef.current = false;
-          initializeApp();
-        }, VPS_CONFIG.retryDelay);
-        return;
-      }
+      // Em caso de erro, mostrar login
+      setUser(null);
+      setShouldShowLogin(true);
+      setError(null); // Não mostrar erro, apenas ir para login
       
-      let errorMessage = 'Erro desconhecido';
-      
-      if (err.message?.includes('Timeout')) {
-        errorMessage = isVPS 
-          ? 'Timeout de conexão com o servidor. Verifique sua conexão de internet.'
-          : 'Tempo limite de conexão excedido';
-      } else if (err.message?.includes('Failed to fetch')) {
-        errorMessage = isVPS
-          ? 'Erro de rede. Verifique se o servidor está acessível.'
-          : 'Erro de conexão com o servidor';
-      } else if (err.message?.includes('variáveis')) {
-        errorMessage = 'Configuração incompleta. Verifique as variáveis de ambiente no EasyPanel.';
-      } else {
-        errorMessage = err.message || 'Erro na inicialização da aplicação';
-      }
-      
-      setError(errorMessage);
-      setShouldShowLogin(false); // Não mostrar login em caso de erro
     } finally {
       setLoading(false);
       initializingRef.current = false;
+      setInitialized(true);
     }
-  }, [checkPersistedSession, fetchUserData, retryCount]);
+  }, []);
 
   // Inicialização da aplicação
   useEffect(() => {
@@ -341,10 +199,14 @@ const App = () => {
   // Handler para login bem-sucedido
   const handleLogin = (userData: User) => {
     console.log('✅ Login realizado:', userData.email);
+    
+    // Salvar dados do usuário
+    saveUserData(userData);
+    
     setUser(userData);
     setShouldShowLogin(false);
     setError(null);
-    setRetryCount(0); // Reset retry count
+    setRetryCount(0);
   };
 
   // Handler para logout
@@ -352,17 +214,8 @@ const App = () => {
     try {
       console.log('🚪 Fazendo logout...');
       
-      // Limpar localStorage manualmente
-      try {
-        localStorage.removeItem('pix-mikro-auth-token');
-        localStorage.removeItem('sb-zzfugxcsinasxrhcwvcp-auth-token');
-        console.log('🗑️ localStorage limpo');
-      } catch (storageError) {
-        console.warn('⚠️ Erro ao limpar localStorage:', storageError);
-      }
-      
-      // Fazer logout no Supabase
-      await supabase.auth.signOut();
+      // Usar função de logout do authHelpers
+      await performLogout();
       
       // Resetar estados
       setUser(null);
@@ -424,7 +277,7 @@ const App = () => {
         <div className="min-h-screen bg-gray-50">
           <Routes>
             <Route 
-              path="/" 
+              path="/*" 
               element={
                 user.role === 'admin' ? (
                   <AdminDashboard user={user} onLogout={handleLogout} />
@@ -433,7 +286,6 @@ const App = () => {
                 )
               } 
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </Router>
