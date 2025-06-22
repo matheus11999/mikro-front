@@ -5,7 +5,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ClientDashboard from './components/ClientDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { supabase, checkPersistedSession } from './lib/supabaseClient';
-import { Wifi, AlertCircle, Loader2 } from 'lucide-react';
+import { Wifi, AlertCircle, Loader2, Server } from 'lucide-react';
 import './App.css';
 
 interface User {
@@ -15,18 +15,44 @@ interface User {
   name?: string;
 }
 
+// Detectar ambiente VPS/EasyPanel
+const isVPS = typeof window !== 'undefined' && (
+  window.location.hostname !== 'localhost' && 
+  window.location.hostname !== '127.0.0.1' &&
+  !window.location.hostname.includes('.local')
+);
+
+const isEasyPanel = typeof window !== 'undefined' && (
+  window.location.hostname.includes('.easypanel') ||
+  window.location.port === '' // Produção geralmente não tem porta
+);
+
+// Configurações otimizadas para VPS
+const VPS_CONFIG = {
+  sessionTimeout: isVPS ? 8000 : 5000, // Mais tempo para VPS
+  userLookupTimeout: isVPS ? 8000 : 5000,
+  initTimeout: isVPS ? 15000 : 10000, // Mais tempo total para VPS
+  retryDelay: isVPS ? 2000 : 1000,
+  maxRetries: isVPS ? 2 : 1
+};
+
 function LoadingScreen() {
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center z-50">
       <div className="text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl mb-6 shadow-lg">
-          <Wifi className="w-8 h-8 text-white" />
+          {isVPS ? <Server className="w-8 h-8 text-white" /> : <Wifi className="w-8 h-8 text-white" />}
         </div>
         <div className="flex items-center justify-center gap-3 mb-4">
           <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
           <h2 className="text-xl font-semibold text-gray-900">Carregando...</h2>
         </div>
-        <p className="text-gray-600">Verificando autenticação</p>
+        <p className="text-gray-600">
+          {isVPS ? 'Conectando ao servidor...' : 'Verificando autenticação'}
+        </p>
+        {isEasyPanel && (
+          <p className="text-xs text-blue-600 mt-2">🚀 EasyPanel</p>
+        )}
       </div>
     </div>
   );
@@ -41,7 +67,16 @@ function ErrorScreen({ error, onRetry }: { error: string; onRetry: () => void })
             <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Erro de Conexão</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <p className="text-gray-600 mb-4">{error}</p>
+          {isVPS && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-blue-800">
+                🌐 Ambiente: VPS/EasyPanel
+                <br />
+                Verifique as variáveis de ambiente
+              </p>
+            </div>
+          )}
           <button
             onClick={onRetry}
             className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
@@ -61,16 +96,29 @@ const App = () => {
   const [initialized, setInitialized] = useState(false);
   const initializingRef = useRef(false);
   const [shouldShowLogin, setShouldShowLogin] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-  // Função melhorada para verificar sessão persistida
+  // Log ambiente na inicialização
+  useEffect(() => {
+    console.log('🌐 Ambiente detectado:', {
+      isVPS,
+      isEasyPanel,
+      hostname: window.location.hostname,
+      port: window.location.port,
+      protocol: window.location.protocol,
+      timeouts: VPS_CONFIG
+    });
+  }, []);
+
+  // Função melhorada para verificar sessão persistida (otimizada para VPS)
   const checkPersistedSession = useCallback(async () => {
     try {
-      console.log('🔍 Verificando sessão persistida...');
+      console.log('🔍 Verificando sessão persistida (VPS otimizado)...');
       
-      // Timeout para evitar travamento
+      // Timeout maior para VPS
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 5000)
+        setTimeout(() => reject(new Error('Timeout na verificação de sessão')), VPS_CONFIG.sessionTimeout)
       );
       
       const { data: { session }, error } = await Promise.race([
@@ -107,20 +155,20 @@ const App = () => {
     }
   }, []);
 
-  // Função para buscar dados do usuário baseado na sessão
+  // Função para buscar dados do usuário baseado na sessão (otimizada para VPS)
   const fetchUserData = useCallback(async (session: any): Promise<User | null> => {
     try {
-      console.log('🔍 Buscando dados do usuário:', session.user.email);
+      console.log('🔍 Buscando dados do usuário (VPS):', session.user.email);
       
-             // Timeout para evitar travamento
-       const userPromise = supabase
-         .from('clientes')
-         .select('id, email, role, nome')
-         .eq('email', session.user.email)
-         .single();
+      // Timeout maior para VPS
+      const userPromise = supabase
+        .from('clientes')
+        .select('id, email, role, nome')
+        .eq('email', session.user.email)
+        .single();
         
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout na busca do usuário')), 5000)
+        setTimeout(() => reject(new Error('Timeout na busca do usuário')), VPS_CONFIG.userLookupTimeout)
       );
       
       const { data: userData, error } = await Promise.race([
@@ -138,7 +186,7 @@ const App = () => {
         return null;
       }
 
-      console.log('✅ Usuário encontrado:', userData.email, userData.role);
+      console.log('✅ Usuário encontrado (VPS):', userData.email, userData.role);
       
       // Validar sessão
       const now = new Date().getTime();
@@ -149,7 +197,7 @@ const App = () => {
         return null;
       }
 
-      console.log('✅ Sessão válida confirmada:', userData.email);
+      console.log('✅ Sessão válida confirmada (VPS):', userData.email);
       
       return {
         id: userData.id,
@@ -158,7 +206,7 @@ const App = () => {
         name: userData.nome
       };
     } catch (err: any) {
-      console.error('❌ Erro ao buscar dados do usuário:', err);
+      console.error('❌ Erro ao buscar dados do usuário (VPS):', err);
       return null;
     }
   }, []);
@@ -176,153 +224,108 @@ const App = () => {
       setError(null);
       setShouldShowLogin(false); // Não mostrar login durante inicialização
 
-      console.log('🚀 Inicializando aplicação...');
+      console.log('🚀 Inicializando aplicação (VPS otimizado)...');
 
-      // Usar a nova função de verificação de sessão
-      const session = await checkPersistedSession();
+      // Timeout geral maior para VPS
+      const initPromise = (async () => {
+        // Usar a nova função de verificação de sessão
+        const session = await checkPersistedSession();
 
-      if (session?.user) {
-        const userData = await fetchUserData(session);
-        if (userData) {
-          console.log('✅ Usuário autenticado:', userData.email, userData.role);
-          setUser(userData);
-          setShouldShowLogin(false);
-        } else {
-          console.log('⚠️ Sessão inválida, fazendo logout...');
-          await supabase.auth.signOut();
-          setUser(null);
-          setShouldShowLogin(true);
-        }
-      } else {
-        console.log('📝 Nenhuma sessão ativa');
-        setUser(null);
-        setShouldShowLogin(true);
-      }
-      
-    } catch (err: any) {
-      console.error('❌ Erro na inicialização:', err);
-      setError(err.message || 'Erro de conexão');
-      setShouldShowLogin(true);
-    } finally {
-      // Garantir que loading seja sempre false no final
-      setTimeout(() => {
-        setLoading(false);
-        setInitialized(true);
-        initializingRef.current = false;
-      }, 100);
-    }
-  }, [fetchUserData, checkPersistedSession]);
-
-  // Inicialização da aplicação
-  useEffect(() => {
-    if (!initialized && !initializingRef.current) {
-      console.log('🎯 Primeira inicialização do app');
-      
-      // Timeout de segurança para evitar loading infinito
-      const initTimeout = setTimeout(() => {
-        if (initializingRef.current) {
-          console.log('⚠️ Timeout de inicialização - forçando parada');
-          setLoading(false);
-          setInitialized(true);
-          initializingRef.current = false;
-          setError('Timeout na inicialização. Tente recarregar a página.');
-        }
-      }, 10000); // 10 segundos
-
-      initializeApp().finally(() => {
-        clearTimeout(initTimeout);
-      });
-
-      return () => {
-        clearTimeout(initTimeout);
-      };
-    }
-  }, [initialized, initializeApp]);
-
-  // Listener para mudanças de autenticação
-  useEffect(() => {
-    console.log('👂 Configurando listener de autenticação...');
-    
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 Mudança de auth:', event, session ? 'Sessão ativa' : 'Sem sessão');
-      
-      // Evitar processar eventos durante inicialização
-      if (initializingRef.current) {
-        console.log('⏳ Ignorando evento durante inicialização');
-        return;
-      }
-
-      try {
-        if (event === 'SIGNED_OUT') {
-          console.log('👋 Usuário deslogado');
-          setUser(null);
-          setShouldShowLogin(true);
-          setLoading(false);
-        } else if (event === 'SIGNED_IN' && session?.user) {
-          console.log('👤 Usuário logado:', session.user.email);
-          setLoading(true);
-          setShouldShowLogin(false);
+        if (session?.user) {
           const userData = await fetchUserData(session);
           if (userData) {
+            console.log('✅ Usuário autenticado (VPS):', userData.email, userData.role);
             setUser(userData);
             setShouldShowLogin(false);
           } else {
-            console.log('⚠️ Login inválido, fazendo logout...');
+            console.log('⚠️ Sessão inválida, fazendo logout...');
             await supabase.auth.signOut();
             setUser(null);
             setShouldShowLogin(true);
           }
-          setLoading(false);
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          console.log('🔄 Token renovado para:', session.user.email);
-          // Verificar se o usuário ainda é válido
-          if (!user) {
-            const userData = await fetchUserData(session);
-            if (userData) {
-              setUser(userData);
-              setShouldShowLogin(false);
-            }
-          }
-        } else if (event === 'INITIAL_SESSION') {
-          console.log('🎯 Sessão inicial detectada');
-          // Já tratado na inicialização
+        } else {
+          console.log('📝 Nenhuma sessão ativa');
+          setUser(null);
+          setShouldShowLogin(true);
         }
-      } catch (err: any) {
-        console.error('❌ Erro no listener de auth:', err);
-        setError(err.message || 'Erro de autenticação');
-        setShouldShowLogin(true);
-        setLoading(false);
+      })();
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout na inicialização da aplicação')), VPS_CONFIG.initTimeout)
+      );
+
+      await Promise.race([initPromise, timeoutPromise]);
+
+      setInitialized(true);
+      console.log('✅ Aplicação inicializada com sucesso (VPS)');
+
+    } catch (err: any) {
+      console.error('❌ Erro na inicialização:', err);
+      
+      // Retry automático para VPS (até 2 tentativas)
+      if (retryCount < VPS_CONFIG.maxRetries && isVPS) {
+        console.log(`🔄 Tentativa ${retryCount + 1}/${VPS_CONFIG.maxRetries} em ${VPS_CONFIG.retryDelay}ms...`);
+        setRetryCount(prev => prev + 1);
+        setTimeout(() => {
+          initializingRef.current = false;
+          initializeApp();
+        }, VPS_CONFIG.retryDelay);
+        return;
       }
-    });
+      
+      let errorMessage = 'Erro desconhecido';
+      
+      if (err.message?.includes('Timeout')) {
+        errorMessage = isVPS 
+          ? 'Timeout de conexão com o servidor. Verifique sua conexão de internet.'
+          : 'Tempo limite de conexão excedido';
+      } else if (err.message?.includes('Failed to fetch')) {
+        errorMessage = isVPS
+          ? 'Erro de rede. Verifique se o servidor está acessível.'
+          : 'Erro de conexão com o servidor';
+      } else if (err.message?.includes('variáveis')) {
+        errorMessage = 'Configuração incompleta. Verifique as variáveis de ambiente no EasyPanel.';
+      } else {
+        errorMessage = err.message || 'Erro na inicialização da aplicação';
+      }
+      
+      setError(errorMessage);
+      setShouldShowLogin(false); // Não mostrar login em caso de erro
+    } finally {
+      setLoading(false);
+      initializingRef.current = false;
+    }
+  }, [checkPersistedSession, fetchUserData, retryCount]);
 
-    return () => {
-      console.log('🧹 Removendo listener de autenticação');
-      authListener.subscription.unsubscribe();
-    };
-  }, [fetchUserData, user]);
+  // Inicialização da aplicação
+  useEffect(() => {
+    if (!initialized && !initializingRef.current) {
+      initializeApp();
+    }
+  }, [initialized, initializeApp]);
 
-  // Listener para quando o usuário volta para a aba (evita loading infinito)
+  // Listener para mudanças de visibilidade (otimizado para VPS)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && initialized && !initializingRef.current) {
-        console.log('👁️ Usuário voltou para a aba');
-        // Se estiver em loading há muito tempo, forçar parada
-        if (loading) {
-          console.log('⚠️ Loading infinito detectado, forçando parada');
-          setLoading(false);
-        }
+      if (!document.hidden && initialized && !user && !loading) {
+        console.log('👁️ Página visível novamente, re-verificando sessão...');
+        // Delay menor para VPS
+        setTimeout(() => {
+          if (!initializingRef.current) {
+            initializeApp();
+          }
+        }, isVPS ? 500 : 1000);
       }
     };
 
     const handleFocus = () => {
-      if (initialized && !initializingRef.current && loading) {
-        console.log('🔍 Foco na janela - verificando loading infinito');
+      if (initialized && !user && !loading) {
+        console.log('🎯 Foco retornado, verificando sessão...');
         setTimeout(() => {
-          if (loading && !initializingRef.current) {
-            console.log('⚠️ Loading infinito detectado no foco, forçando parada');
-            setLoading(false);
+          if (!initializingRef.current) {
+            initializeApp();
           }
-        }, 1000);
+        }, isVPS ? 300 : 500);
       }
     };
 
@@ -333,128 +336,108 @@ const App = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [initialized, loading]);
+  }, [initialized, user, loading, initializeApp]);
 
+  // Handler para login bem-sucedido
   const handleLogin = (userData: User) => {
-    console.log('✅ Login manual realizado:', userData.email);
+    console.log('✅ Login realizado:', userData.email);
     setUser(userData);
-    setLoading(false);
+    setShouldShowLogin(false);
+    setError(null);
+    setRetryCount(0); // Reset retry count
   };
 
+  // Handler para logout
   const handleLogout = async () => {
     try {
-      console.log('👋 Iniciando logout...');
-      setLoading(true);
+      console.log('🚪 Fazendo logout...');
+      
+      // Limpar localStorage manualmente
+      try {
+        localStorage.removeItem('pix-mikro-auth-token');
+        localStorage.removeItem('sb-zzfugxcsinasxrhcwvcp-auth-token');
+        console.log('🗑️ localStorage limpo');
+      } catch (storageError) {
+        console.warn('⚠️ Erro ao limpar localStorage:', storageError);
+      }
+      
+      // Fazer logout no Supabase
       await supabase.auth.signOut();
+      
+      // Resetar estados
       setUser(null);
+      setShouldShowLogin(true);
+      setInitialized(false);
+      setRetryCount(0);
+      
       console.log('✅ Logout realizado com sucesso');
-    } catch (error) {
-      console.error('❌ Erro no logout:', error);
-    } finally {
-      setLoading(false);
+      
+      // Forçar reload da página para garantir limpeza completa
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+      
+    } catch (err) {
+      console.error('❌ Erro no logout:', err);
+      
+      // Em caso de erro, forçar reload mesmo assim
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     }
   };
 
+  // Handler para retry manual
   const handleRetry = () => {
-    console.log('🔄 Tentando novamente...');
+    console.log('🔄 Retry manual solicitado');
     setError(null);
+    setRetryCount(0);
     setInitialized(false);
     initializeApp();
   };
 
-  // Renderização principal
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-          <p className="text-sm text-gray-500 mt-2">Verificando autenticação</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Renderização condicional
   if (error) {
+    return <ErrorScreen error={error} onRetry={handleRetry} />;
+  }
+
+  if (loading || !initialized) {
+    return <LoadingScreen />;
+  }
+
+  if (!user && shouldShowLogin) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-600 mb-4">❌ Erro</div>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => {
-              setError(null);
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Tentar Novamente
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Mostrar login apenas quando necessário
-  if (!user && shouldShowLogin && initialized) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  // Mostrar loading se ainda não inicializou ou se tem usuário mas ainda carregando
-  if (!initialized || (user && loading)) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  console.log('🎨 Renderizando app. Usuário:', user ? `${user.email} (${user.role})` : 'Não logado');
-
-  return (
-    <Router>
       <ErrorBoundary>
-        <Routes>
-          <Route 
-            path="/login" 
-            element={
-              user ? 
-                <Navigate to={user.role === 'admin' ? '/admin' : '/client'} replace /> : 
-                <Login onLogin={handleLogin} />
-            } 
-          />
-          <Route 
-            path="/admin/*" 
-            element={
-              user?.role === 'admin' ? 
-                <AdminDashboard user={user} onLogout={handleLogout} /> : 
-                <Navigate to="/login" replace />
-            } 
-          />
-          <Route 
-            path="/client/*" 
-            element={
-              user?.role === 'user' ? 
-                <ClientDashboard user={user} onLogout={handleLogout} /> : 
-                <Navigate to="/login" replace />
-            } 
-          />
-          <Route 
-            path="/" 
-            element={
-              <Navigate to={
-                user ? 
-                  (user.role === 'admin' ? '/admin' : '/client') : 
-                  '/login'
-              } replace />
-            } 
-          />
-        </Routes>
+        <Login onLogin={handleLogin} />
       </ErrorBoundary>
-    </Router>
+    );
+  }
+
+  if (!user) {
+    return <LoadingScreen />;
+  }
+
+  // Renderizar aplicação principal
+  return (
+    <ErrorBoundary>
+      <Router>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            <Route 
+              path="/" 
+              element={
+                user.role === 'admin' ? (
+                  <AdminDashboard user={user} onLogout={handleLogout} />
+                ) : (
+                  <ClientDashboard user={user} onLogout={handleLogout} />
+                )
+              } 
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Router>
+    </ErrorBoundary>
   );
 };
 

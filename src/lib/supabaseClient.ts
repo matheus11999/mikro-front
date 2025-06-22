@@ -71,23 +71,28 @@ function createSupabaseClient(): SupabaseClient {
         storage: typeof window !== 'undefined' ? {
           getItem: (key: string) => {
             try {
-              return window.localStorage.getItem(key);
-            } catch {
+              const item = window.localStorage.getItem(key);
+              console.log('🔍 Storage getItem:', key, !!item);
+              return item;
+            } catch (err) {
+              console.warn('⚠️ Storage getItem error:', err);
               return null;
             }
           },
           setItem: (key: string, value: string) => {
             try {
               window.localStorage.setItem(key, value);
-            } catch {
-              // Silently fail if localStorage is not available
+              console.log('✅ Storage setItem:', key, 'saved');
+            } catch (err) {
+              console.warn('⚠️ Storage setItem error:', err);
             }
           },
           removeItem: (key: string) => {
             try {
               window.localStorage.removeItem(key);
-            } catch {
-              // Silently fail if localStorage is not available
+              console.log('🗑️ Storage removeItem:', key, 'removed');
+            } catch (err) {
+              console.warn('⚠️ Storage removeItem error:', err);
             }
           }
         } : undefined,

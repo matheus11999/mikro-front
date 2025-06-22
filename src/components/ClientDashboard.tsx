@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import ClientWithdrawals from './ClientWithdrawals';
+import { DebugConnection } from './DebugConnection';
 
 interface User {
   id: string;
@@ -79,31 +80,42 @@ function DashboardContent() {
   const loadClientData = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Carregando dados do cliente (VPS otimizado)...');
 
-      // Buscar dados do usuário atual de forma mais direta
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser?.email) {
-        console.error('❌ Nenhum usuário autenticado');
-        return;
-      }
+      // Timeout para VPS
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout ao carregar dados do cliente')), 10000)
+      );
 
-      console.log('🔍 DEBUG - Auth User Email:', authUser.email);
+      const loadData = async () => {
+        // Buscar dados do usuário atual de forma mais direta
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser?.email) {
+          console.error('❌ Nenhum usuário autenticado');
+          return;
+        }
 
-      // Buscar cliente diretamente por email
-      const { data: cliente, error: clienteError } = await supabase
-        .from('clientes')
-        .select('*')
-        .eq('email', authUser.email)
-        .single();
+        console.log('🔍 DEBUG - Auth User Email:', authUser.email);
 
-      console.log('🔍 DEBUG - Cliente query result:', { cliente, clienteError });
+        // Buscar cliente diretamente por email
+        const { data: cliente, error: clienteError } = await supabase
+          .from('clientes')
+          .select('*')
+          .eq('email', authUser.email)
+          .single();
 
-      if (clienteError || !cliente) {
-        console.error('❌ Cliente não encontrado:', clienteError);
-        return;
-      }
+        console.log('🔍 DEBUG - Cliente query result:', { cliente, clienteError });
 
-      console.log('✅ DEBUG - Cliente encontrado:', cliente);
+        if (clienteError || !cliente) {
+          console.error('❌ Cliente não encontrado:', clienteError);
+          throw new Error('Cliente não encontrado no banco de dados');
+        }
+
+        console.log('✅ DEBUG - Cliente encontrado:', cliente);
+        return cliente;
+      };
+
+      const cliente = await Promise.race([loadData(), timeout]);
 
       // Datas para cálculos
       const agora = new Date();
@@ -118,15 +130,12 @@ function DashboardContent() {
       
       const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
-      const [
-        mikrotiksRes,
-        vendasTodasRes,
-        vendasHojeRes,
-        vendasSemanaRes,
-        vendasMesRes,
-        macsRes,
-        recentVendasRes
-      ] = await Promise.all([
+      // Carregar dados com timeout para VPS
+      const dataTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout ao carregar dados das vendas')), 12000)
+      );
+
+      const loadAllData = Promise.all([
         supabase.from('mikrotiks').select('id, nome, status').eq('cliente_id', cliente.id).eq('status', 'Ativo'),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado'),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
@@ -135,6 +144,17 @@ function DashboardContent() {
         supabase.from('macs').select('id, mikrotik_id, status'),
         supabase.from('vendas').select('*, mikrotiks(nome), planos(nome)').eq('status', 'aprovado').order('data', { ascending: false }).limit(10)
       ]);
+
+      const results = await Promise.race([loadAllData, dataTimeout]) as any[];
+      const [
+        mikrotiksRes,
+        vendasTodasRes,
+        vendasHojeRes,
+        vendasSemanaRes,
+        vendasMesRes,
+        macsRes,
+        recentVendasRes
+      ] = results;
 
       const saldo = parseFloat(cliente.saldo || '0');
       const mikrotiks = mikrotiksRes.data || [];
@@ -200,8 +220,22 @@ function DashboardContent() {
 
       setRecentSales(userRecentVendas);
 
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados do dashboard:', error);
+    } catch (error: any) {
+      console.error('❌ Erro ao carregar dados do dashboard (VPS):', error);
+      
+      // Em caso de erro, ainda mostrar interface básica
+      setStats({
+        saldo: 0,
+        totalVendas: 0,
+        receitaTotal: 0,
+        mikrotiksAtivos: 0,
+        macsOnline: 0,
+        totalMacs: 0,
+        lucroHoje: 0,
+        lucroSemana: 0,
+        lucroMes: 0
+      });
+      setRecentSales([]);
     } finally {
       // Garantir que loading seja sempre false no final
       setTimeout(() => setLoading(false), 100);
@@ -560,18 +594,18 @@ function ClientMikrotiks() {
 
       console.log('✅ DEBUG - Cliente encontrado:', cliente);
 
-      // Buscar mikrotiks do cliente
+      // Buscar mikrotiks do cliente (sem order por enquanto para evitar erro de coluna)
       const { data: mikrotiks, error: mikrotiksError } = await supabase
         .from('mikrotiks')
         .select('*')
-        .eq('cliente_id', cliente.id)
-        .order('criado_em', { ascending: false });
+        .eq('cliente_id', cliente.id);
 
       console.log('🔍 DEBUG - Mikrotiks query:', { 
         cliente_id: cliente.id, 
         mikrotiks, 
         mikrotiksError,
-        count: mikrotiks?.length || 0
+        count: mikrotiks?.length || 0,
+        fullMikrotiks: mikrotiks
       });
 
       if (mikrotiksError) {
@@ -591,8 +625,7 @@ function ClientMikrotiks() {
         const { data: planos, error: planosError } = await supabase
           .from('planos')
           .select('*')
-          .in('mikrotik_id', mikrotiksIds)
-          .order('criado_em', { ascending: false });
+          .in('mikrotik_id', mikrotiksIds);
 
         console.log('🔍 DEBUG - Planos query:', { mikrotiksIds, planos, planosError });
 
@@ -895,16 +928,24 @@ function ClientMikrotiks() {
             );
           })
         ) : (
-          <div className="col-span-full bg-white rounded-xl shadow-sm border p-12 text-center">
-            <Router className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum MikroTik vinculado</h3>
-            <p className="text-gray-600 mb-4">
-              Entre em contato com o administrador para vincular seus equipamentos ao seu usuário.
-            </p>
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-blue-700">
-                💡 <strong>Dica:</strong> Após a vinculação, você poderá criar e gerenciar planos de internet para cada equipamento.
+          <div className="col-span-full space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
+              <Router className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum MikroTik vinculado</h3>
+              <p className="text-gray-600 mb-4">
+                Entre em contato com o administrador para vincular seus equipamentos ao seu usuário.
               </p>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  💡 <strong>Dica:</strong> Após a vinculação, você poderá criar e gerenciar planos de internet para cada equipamento.
+                </p>
+              </div>
+            </div>
+            
+            {/* Debug temporário para VPS */}
+            <div className="bg-white rounded-xl shadow-sm border p-6">
+              <h4 className="text-lg font-semibold mb-4">🔧 Debug de Conexão (VPS)</h4>
+              <DebugConnection />
             </div>
           </div>
         )}
