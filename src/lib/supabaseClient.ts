@@ -1,51 +1,129 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Configurações das variáveis de ambiente (definidas no EasyPanel)
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_KEY;
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE;
 
-// Verificar se as variáveis de ambiente estão definidas
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_KEY são obrigatórias');
+// Verificar se as variáveis de ambiente obrigatórias estão definidas
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Configuração Supabase:', {
+    url: !!supabaseUrl,
+    anonKey: !!supabaseAnonKey,
+    serviceRole: !!supabaseServiceRoleKey
+  });
+  throw new Error('Variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_KEY são obrigatórias (configure no EasyPanel)');
 }
 
-// Singleton pattern para evitar múltiplas instâncias
+// Chave para armazenamento da sessão
 const STORAGE_KEY = 'pix-mikro-auth-token';
 
-// Função para criar ou reutilizar a instância do Supabase
-function createSupabaseClient() {
-  // Verificar se já existe uma instância global
-  if (typeof window !== 'undefined' && (window as any).__SUPABASE_CLIENT__) {
-    return (window as any).__SUPABASE_CLIENT__;
+// Instâncias globais (singleton pattern)
+let supabaseClientInstance: SupabaseClient | null = null;
+let supabaseAdminInstance: SupabaseClient | null = null;
+
+// Função para criar cliente principal (anônimo/autenticado)
+function createSupabaseClient(): SupabaseClient {
+  if (supabaseClientInstance) {
+    return supabaseClientInstance;
   }
 
-  const instance = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-      storageKey: STORAGE_KEY
-    },
-    global: {
-      headers: {
-        'X-Client-Info': 'pix-mikro-web'
+  try {
+    supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storageKey: STORAGE_KEY
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'pix-mikro-web-client'
+        }
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
       }
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10
-      }
+    });
+
+    // Armazenar globalmente para evitar múltiplas instâncias
+    if (typeof window !== 'undefined') {
+      (window as any).__SUPABASE_CLIENT__ = supabaseClientInstance;
     }
-  });
 
-  // Armazenar globalmente para evitar múltiplas instâncias
-  if (typeof window !== 'undefined') {
-    (window as any).__SUPABASE_CLIENT__ = instance;
+    return supabaseClientInstance;
+  } catch (error) {
+    console.error('Erro ao criar cliente Supabase:', error);
+    throw new Error('Falha ao inicializar conexão com Supabase');
   }
-
-  return instance;
 }
 
-// Exportar instância única
+// Função para criar cliente administrativo (apenas quando necessário)
+function createSupabaseAdminClient(): SupabaseClient {
+  if (supabaseAdminInstance) {
+    return supabaseAdminInstance;
+  }
+
+  if (!supabaseServiceRoleKey) {
+    throw new Error('Service Role Key não configurada para operações administrativas (configure no EasyPanel)');
+  }
+
+  try {
+    supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'pix-mikro-admin-client'
+        }
+      }
+    });
+
+    return supabaseAdminInstance;
+  } catch (error) {
+    console.error('Erro ao criar cliente admin Supabase:', error);
+    throw new Error('Falha ao inicializar cliente administrativo Supabase');
+  }
+}
+
+// Exportar instâncias
 export const supabase = createSupabaseClient();
-export const supabasePublic = supabase; 
+export const supabasePublic = supabase; // Compatibilidade com código existente
+
+// Cliente administrativo (apenas para operações específicas)
+export const getSupabaseAdmin = (): SupabaseClient => {
+  return createSupabaseAdminClient();
+};
+
+// Função utilitária para verificar se a conexão está funcionando
+export async function testConnection(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.from('profiles').select('count').limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// Função para reinicializar conexões (útil para debug)
+export function resetConnections(): void {
+  supabaseClientInstance = null;
+  supabaseAdminInstance = null;
+  if (typeof window !== 'undefined') {
+    delete (window as any).__SUPABASE_CLIENT__;
+  }
+}
+
+// Log de inicialização (apenas em desenvolvimento)
+if (import.meta.env.DEV) {
+  console.log('Supabase Client inicializado (EasyPanel):', {
+    url: supabaseUrl,
+    hasAnonKey: !!supabaseAnonKey,
+    hasServiceKey: !!supabaseServiceRoleKey
+  });
+} 

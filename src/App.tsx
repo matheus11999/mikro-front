@@ -16,13 +16,14 @@ import ReportsManagement from './components/ReportsManagement';
 import ClientDashboard from './components/ClientDashboard';
 import ClientWithdrawals from './components/ClientWithdrawals';
 import TestePix from './pages/TestePix';
-import { supabase } from './lib/supabaseClient';
+import { supabase, testConnection } from './lib/supabaseClient';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutos
     },
   },
 });
@@ -33,9 +34,52 @@ interface User {
   email: string;
 }
 
+// Componente de erro para falhas de conexão
+const ConnectionError = ({ onRetry }: { onRetry: () => void }) => (
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+      <div className="text-red-500 text-6xl mb-4">⚠️</div>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">Erro de Conexão</h2>
+      <p className="text-gray-600 mb-4">
+        Não foi possível conectar ao servidor. Verifique sua conexão com a internet.
+      </p>
+      <button
+        onClick={onRetry}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+      >
+        Tentar Novamente
+      </button>
+    </div>
+  </div>
+);
+
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
+  const [appInitialized, setAppInitialized] = useState(false);
+
+  // Função para inicializar a aplicação
+  const initializeApp = async () => {
+    try {
+      setLoading(true);
+      setConnectionError(false);
+
+      // Testar conexão com Supabase
+      const isConnected = await testConnection();
+      if (!isConnected) {
+        throw new Error('Falha na conexão com Supabase');
+      }
+
+      setAppInitialized(true);
+    } catch (error) {
+      console.error('Erro ao inicializar aplicação:', error);
+      setConnectionError(true);
+      setAppInitialized(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -49,78 +93,12 @@ const App = () => {
           console.error('Erro ao verificar sessão:', error);
           if (mounted) {
             setUser(null);
-            setLoading(false);
           }
           return;
         }
 
-        if (session?.user?.email) {
+        if (session?.user?.email && mounted) {
           // Buscar na tabela clientes (consistência com resto da app)
-          const { data: clientes, error: clienteError } = await supabase
-            .from('clientes')
-            .select('id, role, email')
-            .eq('email', session.user.email)
-            .limit(1);
-
-          if (clienteError) {
-            console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
-            // Se não encontrar na tabela clientes, considerar como admin
-            if (mounted) {
-              setUser({
-                role: 'admin',
-                id: session.user.id,
-                email: session.user.email
-              });
-              setLoading(false);
-            }
-            return;
-          }
-
-          if (clientes && clientes.length > 0 && mounted) {
-            setUser({
-              role: clientes[0].role || 'user',
-              id: clientes[0].id,
-              email: clientes[0].email
-            });
-          } else if (mounted) {
-            // Se não encontrar na tabela clientes, considerar como admin
-            setUser({
-              role: 'admin',
-              id: session.user.id,
-              email: session.user.email
-            });
-          }
-        } else if (mounted) {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Erro inesperado:', error);
-        if (mounted) {
-          setUser(null);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    checkSession();
-
-    // Escutar mudanças de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        
-        if (event === 'SIGNED_OUT' || !session?.user?.email) {
-          if (mounted) {
-            setUser(null);
-            setLoading(false);
-          }
-          return;
-        }
-
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
             const { data: clientes, error: clienteError } = await supabase
               .from('clientes')
@@ -131,23 +109,21 @@ const App = () => {
             if (clienteError) {
               console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
               // Se não encontrar na tabela clientes, considerar como admin
-              if (mounted) {
-                setUser({
-                  role: 'admin',
-                  id: session.user.id,
-                  email: session.user.email
-                });
-              }
+              setUser({
+                role: 'admin',
+                id: session.user.id,
+                email: session.user.email
+              });
               return;
             }
 
-            if (clientes && clientes.length > 0 && mounted) {
+            if (clientes && clientes.length > 0) {
               setUser({
                 role: clientes[0].role || 'user',
                 id: clientes[0].id,
                 email: clientes[0].email
               });
-            } else if (mounted) {
+            } else {
               // Se não encontrar na tabela clientes, considerar como admin
               setUser({
                 role: 'admin',
@@ -155,22 +131,108 @@ const App = () => {
                 email: session.user.email
               });
             }
-          } catch (error) {
-            console.error('Erro ao processar mudança de auth:', error);
-          } finally {
+          } catch (dbError) {
+            console.error('Erro ao buscar dados do usuário:', dbError);
+            // Em caso de erro de DB, ainda permitir login como admin
+            setUser({
+              role: 'admin',
+              id: session.user.id,
+              email: session.user.email
+            });
+          }
+        } else if (mounted) {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Erro inesperado ao verificar sessão:', error);
+        if (mounted) {
+          setUser(null);
+        }
+      }
+    };
+
+    // Inicializar app e verificar sessão
+    const initialize = async () => {
+      await initializeApp();
+      if (appInitialized) {
+        await checkSession();
+      }
+    };
+
+    initialize();
+
+    // Escutar mudanças de autenticação apenas se app foi inicializada
+    let subscription: any;
+    if (appInitialized) {
+      subscription = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          console.log('Auth state changed:', event, session?.user?.email);
+          
+          if (event === 'SIGNED_OUT' || !session?.user?.email) {
             if (mounted) {
-              setLoading(false);
+              setUser(null);
+            }
+            return;
+          }
+
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            try {
+              const { data: clientes, error: clienteError } = await supabase
+                .from('clientes')
+                .select('id, role, email')
+                .eq('email', session.user.email)
+                .limit(1);
+
+              if (clienteError) {
+                console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
+                // Se não encontrar na tabela clientes, considerar como admin
+                if (mounted) {
+                  setUser({
+                    role: 'admin',
+                    id: session.user.id,
+                    email: session.user.email
+                  });
+                }
+                return;
+              }
+
+              if (clientes && clientes.length > 0 && mounted) {
+                setUser({
+                  role: clientes[0].role || 'user',
+                  id: clientes[0].id,
+                  email: clientes[0].email
+                });
+              } else if (mounted) {
+                // Se não encontrar na tabela clientes, considerar como admin
+                setUser({
+                  role: 'admin',
+                  id: session.user.id,
+                  email: session.user.email
+                });
+              }
+            } catch (error) {
+              console.error('Erro ao processar mudança de auth:', error);
+              // Em caso de erro, ainda permitir login como admin
+              if (mounted) {
+                setUser({
+                  role: 'admin',
+                  id: session.user.id,
+                  email: session.user.email
+                });
+              }
             }
           }
         }
-      }
-    );
+      );
+    }
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.data?.subscription?.unsubscribe();
+      }
     };
-  }, []);
+  }, [appInitialized]);
 
   const handleLogin = async (userId: string, userRole: 'admin' | 'user') => {
     try {
@@ -179,7 +241,6 @@ const App = () => {
       
       if (error) {
         console.error('Erro ao verificar usuário:', error);
-        setLoading(false);
         return;
       }
 
@@ -233,12 +294,20 @@ const App = () => {
     }
   }
 
-  if (loading) {
+  // Mostrar erro de conexão
+  if (connectionError) {
+    return <ConnectionError onRetry={initializeApp} />;
+  }
+
+  // Loading inicial
+  if (loading || !appInitialized) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <p className="text-gray-600">
+            {loading ? 'Carregando...' : 'Conectando ao servidor...'}
+          </p>
         </div>
       </div>
     );

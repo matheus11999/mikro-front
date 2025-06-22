@@ -1,36 +1,12 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-const supabaseUrl = 'https://zzfugxcsinasxrhcwvcp.supabase.co';
-const supabaseServiceRole = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6ZnVneGNzaW5hc3hyaGN3dmNwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDE4MjA1MSwiZXhwIjoyMDY1NzU4MDUxfQ.a8bDJlXu9njwn-PZ3Dg4Hf2FMmnWioxlagTfuSSezpg';
-
-// Singleton pattern mais robusto para evitar múltiplas instâncias do admin client
-let supabaseAdminInstance: SupabaseClient | null = null;
-
-function getSupabaseAdmin(): SupabaseClient {
-  if (!supabaseAdminInstance) {
-    if (!supabaseUrl || !supabaseServiceRole) {
-      throw new Error('Supabase URL e Service Role são obrigatórios para o admin client.');
-    }
-    supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceRole, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'supabase-js-admin'
-        }
-      }
-    });
-  }
-  return supabaseAdminInstance;
-}
-
-export const supabaseAdmin = getSupabaseAdmin();
+// Re-exportar cliente administrativo da configuração principal
+export { getSupabaseAdmin as supabaseAdmin } from './supabaseClient';
 
 // Função para configurar as políticas
 export async function setupPolicies() {
   try {
+    const { getSupabaseAdmin } = await import('./supabaseClient');
+    const supabaseAdmin = getSupabaseAdmin();
+    
     const tables = ['macs', 'vendas', 'planos', 'mikrotiks', 'senhas', 'profiles'];
 
     // Primeiro, vamos remover todas as políticas existentes
@@ -108,6 +84,9 @@ export async function setupPolicies() {
 // Função para verificar políticas
 export async function checkPolicies() {
   try {
+    const { getSupabaseAdmin } = await import('./supabaseClient');
+    const supabaseAdmin = getSupabaseAdmin();
+    
     const tables = ['macs', 'vendas', 'planos', 'mikrotiks', 'senhas', 'profiles'];
     const policies = [];
 
@@ -135,6 +114,9 @@ export async function checkPolicies() {
 // Função para remover todas as políticas
 export async function removePolicies() {
   try {
+    const { getSupabaseAdmin } = await import('./supabaseClient');
+    const supabaseAdmin = getSupabaseAdmin();
+    
     const tables = ['macs', 'vendas', 'planos', 'mikrotiks', 'senhas', 'profiles'];
     for (const table of tables) {
       try {

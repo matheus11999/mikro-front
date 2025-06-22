@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Key, CheckCircle, Upload, Search, RefreshCw, BarChart3, DollarSign, Filter, Edit, Trash2, Download } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { supabase, getSupabaseAdmin } from '../lib/supabaseClient';
 
 const PasswordsManagement = () => {
   const [passwords, setPasswords] = useState([]);
@@ -86,6 +85,7 @@ const PasswordsManagement = () => {
       setImportLoading(true);
       
              // Busca senhas existentes usando cliente administrativo
+       const supabaseAdmin = getSupabaseAdmin();
        const { data: existentes, error: errorExistentes } = await supabaseAdmin
          .from('senhas')
          .select('usuario, senha')
@@ -167,6 +167,7 @@ const PasswordsManagement = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta senha?')) {
       setLoading(true);
+      const supabaseAdmin = getSupabaseAdmin();
       const { error } = await supabaseAdmin.from('senhas').delete().eq('id', id);
       if (error) {
         console.error('Erro ao excluir senha:', error);
@@ -181,6 +182,7 @@ const PasswordsManagement = () => {
   const handleBulkDelete = async () => {
     if (window.confirm(`Tem certeza que deseja excluir ${selectedPasswords.length} senhas?`)) {
       setLoading(true);
+      const supabaseAdmin = getSupabaseAdmin();
       const { error } = await supabaseAdmin.from('senhas').delete().in('id', selectedPasswords);
       if (error) {
         console.error('Erro ao excluir senhas:', error);
