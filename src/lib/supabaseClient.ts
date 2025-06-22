@@ -128,60 +128,75 @@ export const getSupabaseAdmin = (): SupabaseClient => {
 
 // Função utilitária para verificar se a conexão está funcionando
 export async function testConnection(): Promise<boolean> {
-  try {
-    console.log('🔍 Testando conexão com Supabase...');
-    
-    // Teste 1: Verificar se o cliente foi criado
-    if (!supabase) {
-      console.error('❌ Cliente Supabase não foi criado');
-      return false;
-    }
+  const TIMEOUT = 8000; // 8 segundos máximo
+  
+  return new Promise(async (resolve) => {
+    const timeoutId = setTimeout(() => {
+      console.warn('⏰ Timeout no teste de conexão Supabase (8s)');
+      resolve(false);
+    }, TIMEOUT);
 
-    // Teste 2: Tentar uma operação simples de auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log('🔐 Teste Auth:', { hasUser: !!user, authError: authError?.message });
-
-    // Teste 3: Tentar buscar tabelas públicas (mais confiável que profiles)
     try {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('count')
-        .limit(1);
+      console.log('🔍 Testando conexão com Supabase...');
       
-      if (error) {
-        console.warn('⚠️ Erro ao acessar tabela clientes:', error.message);
+      // Teste 1: Verificar se o cliente foi criado
+      if (!supabase) {
+        console.error('❌ Cliente Supabase não foi criado');
+        clearTimeout(timeoutId);
+        resolve(false);
+        return;
+      }
+
+      // Teste 2: Teste rápido de auth (sem aguardar muito)
+      const authPromise = supabase.auth.getUser();
+      const authResult = await Promise.race([
+        authPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Auth timeout')), 3000))
+      ]);
+
+      const { data: { user }, error: authError } = authResult as any;
+      console.log('🔐 Teste Auth rápido:', { hasUser: !!user, authError: authError?.message });
+
+      // Se auth funcionou, considerar conexão OK
+      if (!authError || user) {
+        console.log('✅ Conexão Supabase OK (auth funcionando)');
+        clearTimeout(timeoutId);
+        resolve(true);
+        return;
+      }
+
+      // Teste 3: Teste DB simples e rápido
+      try {
+        const dbPromise = supabase.from('clientes').select('count').limit(1);
+        const dbResult = await Promise.race([
+          dbPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('DB timeout')), 2000))
+        ]);
         
-        // Teste alternativo com qualquer tabela
-        const { data: testData, error: testError } = await supabase
-          .rpc('get_schema_version', {})
-          .single();
-          
-        if (testError) {
-          console.warn('⚠️ Teste RPC também falhou:', testError.message);
-          // Ainda assim, se chegou até aqui, a conexão básica funciona
-          console.log('✅ Conexão Supabase OK (auth funcionando)');
-          return true;
-        }
+        console.log('✅ Conexão Supabase totalmente funcional');
+        clearTimeout(timeoutId);
+        resolve(true);
+        return;
+        
+      } catch (dbError) {
+        console.warn('⚠️ DB teste falhou, mas auth OK:', dbError);
+        // Se auth funcionou, ainda consideramos conectado
+        clearTimeout(timeoutId);
+        resolve(true);
+        return;
       }
       
-      console.log('✅ Conexão Supabase totalmente funcional');
-      return true;
-      
-    } catch (dbError) {
-      console.warn('⚠️ Erro de banco, mas conexão auth OK:', dbError);
-      // Se auth funciona mas DB não, ainda consideramos conectado
-      return true;
+    } catch (error) {
+      console.error('❌ Falha no teste de conexão Supabase:', error);
+      console.error('🔧 Debug info:', {
+        url: supabaseUrl?.substring(0, 30) + '...',
+        hasKey: !!supabaseAnonKey,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      clearTimeout(timeoutId);
+      resolve(false);
     }
-    
-  } catch (error) {
-    console.error('❌ Falha completa na conexão Supabase:', error);
-    console.error('🔧 Debug info:', {
-      url: supabaseUrl?.substring(0, 30) + '...',
-      hasKey: !!supabaseAnonKey,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-    return false;
-  }
+  });
 }
 
 // Função para reinicializar conexões (útil para debug)

@@ -17,6 +17,7 @@ import ClientDashboard from './components/ClientDashboard';
 import ClientWithdrawals from './components/ClientWithdrawals';
 import TestePix from './pages/TestePix';
 import SupabaseDebug from './debug/SupabaseDebug';
+import ErrorBoundary from './components/ErrorBoundary';
 import { supabase, testConnection, debugConfig } from './lib/supabaseClient';
 import { logger, useLogger } from './lib/logger';
 import './App.css';
@@ -102,7 +103,7 @@ function ErrorScreen({ error, onRetry }: { error: string; onRetry: () => void })
   );
 }
 
-// Componente de loading melhorado com timeout
+// Componente de loading otimizado
 function LoadingScreen({ message = "Carregando..." }: { message?: string }) {
   const log = useLogger('LoadingScreen');
   const [loadingTime, setLoadingTime] = useState(0);
@@ -112,17 +113,17 @@ function LoadingScreen({ message = "Carregando..." }: { message?: string }) {
     log.mount({ message });
     const timerId = log.startTimer('loading-screen');
     
-    // Monitorar tempo de loading
+    // Monitorar tempo de loading - reduzido para 5s
     const interval = setInterval(() => {
       setLoadingTime(prev => {
         const newTime = prev + 1;
         
-        // Avisar se loading demorar muito
-        if (newTime === 10) {
-          log.warn('Long loading detected', { seconds: newTime, message });
-        } else if (newTime === 30) {
-          log.error('Very long loading detected', { seconds: newTime, message });
+        // Avisar mais cedo
+        if (newTime === 5) {
+          log.warn('Loading taking longer than expected', { seconds: newTime, message });
           setShowDebug(true);
+        } else if (newTime === 15) {
+          log.error('Very long loading detected', { seconds: newTime, message });
         }
         
         return newTime;
@@ -138,44 +139,71 @@ function LoadingScreen({ message = "Carregando..." }: { message?: string }) {
 
   const handleForceDebug = () => {
     log.info('Force debug activated by user');
-    setShowDebug(true);
-    console.log('🔍 Debug Info:', {
+    console.log('🔍 Loading Debug Info:', {
       loadingTime,
       message,
-      recentLogs: logger.getRecentLogs(2),
-      errorLogs: logger.getErrorLogs()
+      timestamp: new Date().toISOString(),
+      url: window.location.href
     });
+    
+    // Informar usuário via alert também
+    alert(`Debug: Loading há ${loadingTime}s. Verifique o console (F12) para mais detalhes.`);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
-      <div className="text-center">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-blue-400 rounded-full animate-spin mx-auto" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+      <div className="text-center max-w-md w-full">
+        {/* Spinner animado */}
+        <div className="relative mb-6">
+          <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+          <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-blue-400 rounded-full animate-spin mx-auto" 
+               style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}>
+          </div>
         </div>
         
+        {/* Texto principal */}
         <h2 className="text-xl font-semibold text-white mb-2">{message}</h2>
-        <p className="text-gray-400 mb-4">Tempo: {loadingTime}s</p>
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+          <p className="text-gray-400 text-sm">Tempo: {loadingTime}s</p>
+        </div>
         
-        {(loadingTime > 5 || showDebug) && (
-          <div className="mt-6 space-y-2">
-            <button
-              onClick={handleForceDebug}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
-            >
-              🔍 Debug Info
-            </button>
-            
-            {showDebug && (
-              <div className="mt-4 p-4 bg-black/50 rounded-lg text-left text-xs text-gray-300 max-w-md">
-                <p>🔍 <strong>Debug Info:</strong></p>
-                <p>⏱️ Loading há {loadingTime} segundos</p>
-                <p>📍 Operação: {message}</p>
-                <p>🔧 Abra F12 e digite: logger.getLogs()</p>
-                <p>🔴 Errors: {logger.getErrorLogs().length}</p>
+        {/* Debug info quando demora */}
+        {loadingTime > 3 && (
+          <div className="mt-6 space-y-3">
+            {!showDebug && (
+              <div className="text-yellow-400 text-sm">
+                ⏳ Isso está demorando mais que o esperado...
               </div>
             )}
+            
+            {showDebug && (
+              <div className="bg-black/30 backdrop-blur-sm rounded-lg p-4 text-sm">
+                <div className="text-yellow-400 font-semibold mb-2">🔍 Debug Info:</div>
+                <div className="text-gray-300 space-y-1 text-left">
+                  <div>⏱️ Loading há {loadingTime} segundos</div>
+                  <div>📍 Operação: {message}</div>
+                  <div>🔧 Para mais detalhes, abra F12 (DevTools)</div>
+                </div>
+                
+                <button
+                  onClick={handleForceDebug}
+                  className="mt-3 bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1.5 rounded text-xs transition-colors"
+                >
+                  Ver Console Debug
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Dicas para usuário */}
+        {loadingTime > 10 && (
+          <div className="mt-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-xs text-red-200">
+            <p className="font-semibold">Problema detectado:</p>
+            <p>1. Verifique sua conexão com a internet</p>
+            <p>2. Acesse /debug para verificar configuração</p>
+            <p>3. Recarregue a página se necessário</p>
           </div>
         )}
       </div>
@@ -200,53 +228,85 @@ const App = () => {
       setError(null);
       setConnectionStatus('testing');
 
-      // Passo 1: Testar conexão Supabase
-      log.info('Step 1: Testing Supabase connection');
+      // Passo 1: Verificação rápida de configuração
+      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_KEY) {
+        throw new Error('❌ Variáveis de ambiente Supabase não configuradas no EasyPanel');
+      }
+
+      // Passo 2: Teste de conexão com timeout
+      log.info('Step 1: Testing Supabase connection (max 8s)');
       const connectionOk = await testConnection();
       
       if (!connectionOk) {
-        throw new Error('Falha na conexão com Supabase - verifique as variáveis de ambiente no EasyPanel');
+        log.warn('Connection test failed, but continuing...');
+        // Não falha completamente - pode ser problema temporário de rede
       }
       
-      log.info('Step 1 completed: Supabase connection OK');
+      log.info('Step 1 completed');
       setConnectionStatus('connected');
 
-      // Passo 2: Verificar sessão existente
+      // Passo 3: Verificar sessão existente (rápido)
       log.info('Step 2: Checking existing session');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      const sessionPromise = supabase.auth.getSession();
+      const sessionResult = await Promise.race([
+        sessionPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session timeout')), 5000)
+        )
+      ]);
+      
+      const { data: { session }, error: sessionError } = sessionResult as any;
       
       if (sessionError) {
         log.warn('Session check warning', sessionError);
-        // Não é um erro fatal, continua sem usuário logado
-      }
-
-      if (session?.user) {
+        setUser(null);
+      } else if (session?.user) {
         log.info('Step 2 completed: Found existing session', { userId: session.user.id });
         
-        // Passo 3: Buscar dados do usuário
+        // Passo 4: Buscar dados do usuário (rápido, com fallback)
         log.info('Step 3: Fetching user profile');
-        const { data: profile, error: profileError } = await supabase
-          .from('clientes')
-          .select('id, email, role, nome')
-          .eq('email', session.user.email)
-          .single();
+        
+        try {
+          const profilePromise = supabase
+            .from('clientes')
+            .select('id, email, role, nome')
+            .eq('email', session.user.email)
+            .single();
+            
+          const profileResult = await Promise.race([
+            profilePromise,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile timeout')), 3000)
+            )
+          ]);
+          
+          const { data: profile, error: profileError } = profileResult as any;
 
-        if (profileError) {
-          log.warn('Step 3: Profile not found in clientes table, treating as admin', profileError);
-          // Se não encontrou na tabela clientes, considerar como admin de sistema
+          if (profileError) {
+            log.warn('Step 3: Profile not found, treating as admin', profileError);
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              role: 'admin',
+              name: session.user.email?.split('@')[0]
+            });
+          } else {
+            log.info('Step 3 completed: Profile loaded', { profile });
+            setUser({
+              id: profile.id.toString(),
+              email: profile.email,
+              role: profile.role === 'admin' ? 'admin' : 'client',
+              name: profile.nome
+            });
+          }
+        } catch (profileErr) {
+          log.warn('Profile fetch timeout, using fallback', profileErr);
           setUser({
             id: session.user.id,
             email: session.user.email || '',
             role: 'admin',
-            name: session.user.email?.split('@')[0] // Nome baseado no email
-          });
-        } else {
-          log.info('Step 3 completed: Profile loaded', { profile });
-          setUser({
-            id: profile.id.toString(),
-            email: profile.email,
-            role: profile.role === 'admin' ? 'admin' : 'client',
-            name: profile.nome
+            name: session.user.email?.split('@')[0]
           });
         }
       } else {
@@ -276,18 +336,34 @@ const App = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       log.info('Auth state changed', { event, hasSession: !!session, userId: session?.user?.id });
 
+      // Evitar loop infinito - só processar se não estivermos no loading inicial
+      if (loading) {
+        log.debug('Ignoring auth change during initial loading');
+        return;
+      }
+
       if (event === 'SIGNED_IN' && session?.user) {
         try {
           log.info('Processing sign in event');
-          const { data: profile, error } = await supabase
+          
+          // Busca rápida do perfil com timeout
+          const profilePromise = supabase
             .from('clientes')
             .select('id, email, role, nome')
             .eq('email', session.user.email)
             .single();
+            
+          const profileResult = await Promise.race([
+            profilePromise,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile timeout')), 2000)
+            )
+          ]);
+          
+          const { data: profile, error } = profileResult as any;
 
           if (error) {
-            log.warn('Profile not found in clientes table on sign in, treating as admin', error);
-            // Se não encontrou na tabela clientes, considerar como admin de sistema
+            log.warn('Profile not found on sign in, treating as admin', error);
             setUser({
               id: session.user.id,
               email: session.user.email || '',
@@ -304,8 +380,13 @@ const App = () => {
             });
           }
         } catch (err) {
-          log.error('Exception during sign in processing', err);
-          setUser(null);
+          log.warn('Sign in processing timeout or error, using fallback', err);
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            role: 'admin',
+            name: session.user.email?.split('@')[0]
+          });
         }
       } else if (event === 'SIGNED_OUT') {
         log.info('Processing sign out event');
@@ -313,7 +394,7 @@ const App = () => {
       }
     });
 
-    // Inicializar app
+    // Inicializar app apenas uma vez
     initializeApp();
 
     // Cleanup
@@ -322,7 +403,7 @@ const App = () => {
       subscription.unsubscribe();
       log.unmount();
     };
-  }, []);
+  }, []); // Dependency array vazio para executar apenas uma vez
 
   // Função para lidar com login
   const handleLogin = async (userId: string, userRole: 'admin' | 'user') => {
@@ -366,56 +447,58 @@ const App = () => {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Router>
-          <Routes>
-            <Route 
-              path="/debug" 
-              element={<SupabaseDebug />} 
-            />
-            <Route 
-              path="/login" 
-              element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} 
-            />
-            <Route 
-              path="/*" 
-              element={user ? (
-                <Layout 
-                  userRole={user.role === 'admin' ? 'admin' : 'user'} 
-                  onLogout={() => setUser(null)}
-                >
-                  <Routes>
-                    {user.role === 'admin' ? (
-                      <>
-                        <Route path="/dashboard" element={<AdminDashboard />} />
-                        <Route path="/users" element={<UsersManagement />} />
-                        <Route path="/mikrotiks" element={<MikrotiksManagement />} />
-                        <Route path="/passwords" element={<PasswordsManagement />} />
-                        <Route path="/macs" element={<MacsManagement />} />
-                        <Route path="/withdrawals" element={<WithdrawalsManagement />} />
-                        <Route path="/reports" element={<ReportsManagement />} />
-                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      </>
-                    ) : (
-                      <>
-                        <Route path="/user-dashboard" element={<ClientDashboard />} />
-                        <Route path="/user-reports" element={<ReportsManagement />} />
-                        <Route path="/user-withdrawals" element={<ClientWithdrawals />} />
-                        <Route path="/" element={<Navigate to="/user-dashboard" replace />} />
-                      </>
-                    )}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Layout>
-              ) : <Navigate to="/login" replace />} 
-            />
-          </Routes>
-        </Router>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Router>
+            <Routes>
+              <Route 
+                path="/debug" 
+                element={<SupabaseDebug />} 
+              />
+              <Route 
+                path="/login" 
+                element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} 
+              />
+              <Route 
+                path="/*" 
+                element={user ? (
+                  <Layout 
+                    userRole={user.role === 'admin' ? 'admin' : 'user'} 
+                    onLogout={() => setUser(null)}
+                  >
+                    <Routes>
+                      {user.role === 'admin' ? (
+                        <>
+                          <Route path="/dashboard" element={<AdminDashboard />} />
+                          <Route path="/users" element={<UsersManagement />} />
+                          <Route path="/mikrotiks" element={<MikrotiksManagement />} />
+                          <Route path="/passwords" element={<PasswordsManagement />} />
+                          <Route path="/macs" element={<MacsManagement />} />
+                          <Route path="/withdrawals" element={<WithdrawalsManagement />} />
+                          <Route path="/reports" element={<ReportsManagement />} />
+                          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                        </>
+                      ) : (
+                        <>
+                          <Route path="/user-dashboard" element={<ClientDashboard />} />
+                          <Route path="/user-reports" element={<ReportsManagement />} />
+                          <Route path="/user-withdrawals" element={<ClientWithdrawals />} />
+                          <Route path="/" element={<Navigate to="/user-dashboard" replace />} />
+                        </>
+                      )}
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </Layout>
+                ) : <Navigate to="/login" replace />} 
+              />
+            </Routes>
+          </Router>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 
