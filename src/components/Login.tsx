@@ -170,30 +170,7 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 mb-3">Credenciais de demonstração:</p>
-              <div className="bg-gray-50 rounded-lg p-4 text-left">
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="font-medium text-gray-700">Admin:</span>
-                    <div className="ml-2 text-gray-600">
-                      <div>Email: mateus11martins@gmail.com</div>
-                      <div>Senha: sua_senha_admin</div>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-700">Usuário:</span>
-                    <div className="ml-2 text-gray-600">
-                      <div>Email: cliente@exemplo.com</div>
-                      <div>Senha: sua_senha_cliente</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>

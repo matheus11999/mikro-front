@@ -58,11 +58,8 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
 
   const initializeApp = useCallback(async () => {
-    if (initialized) return;
-
     try {
       setLoading(true);
       setError(null);
@@ -101,29 +98,24 @@ const App = () => {
         setUser(null);
       }
       
-      setInitialized(true);
     } catch (err: any) {
       console.error('Erro na inicialização:', err);
       setError(err.message || 'Erro de conexão');
     } finally {
       setLoading(false);
     }
-  }, [initialized]);
+  }, []);
 
   useEffect(() => {
-    if (!initialized) {
-      initializeApp();
-    }
-  }, [initializeApp, initialized]);
+    initializeApp();
+  }, [initializeApp]);
 
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
-        setInitialized(false);
         setLoading(false);
       } else if (event === 'SIGNED_IN' && session?.user) {
-        setInitialized(false);
         await initializeApp();
       }
     });
@@ -147,8 +139,13 @@ const App = () => {
     }
   };
 
+  const handleRetry = () => {
+    setError(null);
+    initializeApp();
+  };
+
   if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen error={error} onRetry={initializeApp} />;
+  if (error) return <ErrorScreen error={error} onRetry={handleRetry} />;
 
   return (
     <Router>
