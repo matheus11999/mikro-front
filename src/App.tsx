@@ -61,51 +61,93 @@ const App = () => {
   const [initialized, setInitialized] = useState(false);
   const initializingRef = useRef(false);
 
-  // Função para buscar dados do usuário baseado na sessão
-  const fetchUserData = useCallback(async (session: any) => {
-    if (!session?.user?.email) {
-      return null;
-    }
-
+  // Função melhorada para verificar sessão persistida
+  const checkPersistedSession = useCallback(async () => {
     try {
-      console.log('🔍 Buscando dados do usuário:', session.user.email);
+      console.log('🔍 Verificando sessão persistida...');
       
-      // Buscar dados do usuário na tabela clientes
-      const { data: userData, error: userError } = await supabase
-        .from('clientes')
-        .select('id, nome, email, role')
-        .eq('email', session.user.email)
-        .maybeSingle();
+      // Timeout para evitar travamento
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 5000)
+      );
+      
+      const { data: { session }, error } = await Promise.race([
+        sessionPromise,
+        timeoutPromise
+      ]) as any;
 
-      if (userError) {
-        console.error('Erro ao buscar usuário:', userError);
-        throw userError;
+      if (error) {
+        console.error('❌ Erro ao verificar sessão:', error);
+        return null;
       }
 
-      if (userData) {
-        console.log('✅ Usuário encontrado:', userData.email, userData.role);
-        return {
-          id: userData.id,
-          email: userData.email,
-          role: userData.role === 'admin' ? 'admin' as const : 'user' as const,
-          name: userData.nome
-        };
-      } else if (session.user.email === 'mateus11martins@gmail.com') {
-        // Fallback para admin principal
-        console.log('✅ Fallback admin para:', session.user.email);
-        return {
-          id: session.user.id,
-          email: session.user.email,
-          role: 'admin' as const,
-          name: 'Admin'
-        };
+      if (session?.user) {
+        console.log('✅ Sessão encontrada:', session.user.email);
+        return session;
       } else {
-        console.warn('⚠️ Usuário não encontrado na tabela clientes:', session.user.email);
+        console.log('📝 Nenhuma sessão persistida');
         return null;
       }
     } catch (err: any) {
+      console.error('❌ Erro na verificação de sessão:', err);
+      return null;
+    }
+  }, []);
+
+  // Função para buscar dados do usuário baseado na sessão
+  const fetchUserData = useCallback(async (session: any): Promise<User | null> => {
+    try {
+      console.log('🔍 Buscando dados do usuário:', session.user.email);
+      
+      // Timeout para evitar travamento
+      const userPromise = supabase
+        .from('usuarios')
+        .select('id, email, role, nome')
+        .eq('email', session.user.email)
+        .single();
+        
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout na busca do usuário')), 5000)
+      );
+      
+      const { data: userData, error } = await Promise.race([
+        userPromise,
+        timeoutPromise
+      ]) as any;
+
+      if (error) {
+        console.error('❌ Erro ao buscar usuário:', error);
+        return null;
+      }
+
+      if (!userData) {
+        console.log('⚠️ Usuário não encontrado no banco de dados');
+        return null;
+      }
+
+      console.log('✅ Usuário encontrado:', userData.email, userData.role);
+      
+      // Validar sessão
+      const now = new Date().getTime();
+      const sessionTime = new Date(session.expires_at).getTime();
+      
+      if (sessionTime <= now) {
+        console.log('⚠️ Sessão expirada');
+        return null;
+      }
+
+      console.log('✅ Sessão válida confirmada:', userData.email);
+      
+      return {
+        id: userData.id,
+        email: userData.email,
+        role: userData.role,
+        name: userData.nome
+      };
+    } catch (err: any) {
       console.error('❌ Erro ao buscar dados do usuário:', err);
-      throw err;
+      return null;
     }
   }, []);
 
@@ -145,19 +187,40 @@ const App = () => {
       console.error('❌ Erro na inicialização:', err);
       setError(err.message || 'Erro de conexão');
     } finally {
-      setLoading(false);
-      setInitialized(true);
-      initializingRef.current = false;
+      // Garantir que loading seja sempre false no final
+      setTimeout(() => {
+        setLoading(false);
+        setInitialized(true);
+        initializingRef.current = false;
+      }, 100);
     }
   }, [fetchUserData]);
 
-  // Inicializar app na primeira carga
+  // Inicialização da aplicação
   useEffect(() => {
-    if (!initialized) {
+    if (!initialized && !initializingRef.current) {
       console.log('🎯 Primeira inicialização do app');
-      initializeApp();
+      
+      // Timeout de segurança para evitar loading infinito
+      const initTimeout = setTimeout(() => {
+        if (initializingRef.current) {
+          console.log('⚠️ Timeout de inicialização - forçando parada');
+          setLoading(false);
+          setInitialized(true);
+          initializingRef.current = false;
+          setError('Timeout na inicialização. Tente recarregar a página.');
+        }
+      }, 10000); // 10 segundos
+
+      initializeApp().finally(() => {
+        clearTimeout(initTimeout);
+      });
+
+      return () => {
+        clearTimeout(initTimeout);
+      };
     }
-  }, [initializeApp, initialized]);
+  }, [initialized, initializeApp]);
 
   // Listener para mudanças de autenticação
   useEffect(() => {
@@ -208,6 +271,40 @@ const App = () => {
       authListener.subscription.unsubscribe();
     };
   }, [fetchUserData]);
+
+  // Listener para quando o usuário volta para a aba (evita loading infinito)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && initialized && !initializingRef.current) {
+        console.log('👁️ Usuário voltou para a aba');
+        // Se estiver em loading há muito tempo, forçar parada
+        if (loading) {
+          console.log('⚠️ Loading infinito detectado, forçando parada');
+          setLoading(false);
+        }
+      }
+    };
+
+    const handleFocus = () => {
+      if (initialized && !initializingRef.current && loading) {
+        console.log('🔍 Foco na janela - verificando loading infinito');
+        setTimeout(() => {
+          if (loading && !initializingRef.current) {
+            console.log('⚠️ Loading infinito detectado no foco, forçando parada');
+            setLoading(false);
+          }
+        }, 1000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [initialized, loading]);
 
   const handleLogin = (userData: User) => {
     console.log('✅ Login manual realizado:', userData.email);

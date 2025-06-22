@@ -210,7 +210,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
         provider_name: formData.provider_name,
         profitpercentage: formData.profitpercentage,
         status: formData.status,
-        cliente_id: currentUser?.role === 'admin' ? (formData.cliente_id || null) : currentUser?.id
+        cliente_id: currentUser?.role === 'admin' ? (formData.cliente_id === 'null' ? null : formData.cliente_id || null) : currentUser?.id
       };
       
       const { error } = await supabase
@@ -247,10 +247,10 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
         status: formData.status
       };
 
-      // Se for admin, permite alterar o cliente_id
-      if (currentUser?.role === 'admin') {
-        updateData.cliente_id = formData.cliente_id || null;
-      }
+             // Se for admin, permite alterar o cliente_id
+       if (currentUser?.role === 'admin') {
+         updateData.cliente_id = formData.cliente_id === 'null' ? null : formData.cliente_id || null;
+       }
       
       const { error } = await supabase
         .from('mikrotiks')
@@ -424,7 +424,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       provider_name: '',
       profitpercentage: 10,
       status: 'Ativo',
-      cliente_id: ''
+      cliente_id: 'null'
     });
   };
 
@@ -454,7 +454,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
 
       const { error } = await supabase
         .from('mikrotiks')
-        .update({ cliente_id: clienteId || null })
+        .update({ cliente_id: clienteId === 'null' ? null : clienteId || null })
         .eq('id', mikrotikId);
 
       if (error) throw error;
@@ -867,12 +867,12 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
               {currentUser?.role === 'admin' && (
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="cliente_id">Vincular a Cliente (opcional)</Label>
-                  <Select value={formData.cliente_id} onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}>
+                  <Select value={formData.cliente_id || 'null'} onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um cliente ou deixe em branco para sistema" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sistema (sem vinculação)</SelectItem>
+                      <SelectItem value="null">Sistema (sem vinculação)</SelectItem>
                       {clientes.filter(c => c.role === 'user').map((cliente) => (
                         <SelectItem key={cliente.id} value={cliente.id}>
                           {cliente.nome} ({cliente.email})
@@ -1087,12 +1087,12 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
           >
             <div className="space-y-2">
               <Label htmlFor="cliente_id">Cliente</Label>
-              <Select name="cliente_id" defaultValue={linkingMikrotik?.cliente_id || ''}>
+              <Select name="cliente_id" defaultValue={linkingMikrotik?.cliente_id || 'null'}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um cliente ou deixe em branco para sistema" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sistema (sem vinculação)</SelectItem>
+                  <SelectItem value="null">Sistema (sem vinculação)</SelectItem>
                   {clientes.filter(c => c.role === 'user').map((cliente) => (
                     <SelectItem key={cliente.id} value={cliente.id}>
                       {cliente.nome} ({cliente.email})
