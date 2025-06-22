@@ -543,8 +543,11 @@ function ClientMikrotiks() {
         : { data: [] };
 
       console.log('DEBUG - Cliente ID usado:', clienteId);
-      console.log('DEBUG - MikroTiks:', mikrotiks);
+      console.log('DEBUG - MikroTiks encontrados:', mikrotiks.length, mikrotiks);
       console.log('DEBUG - Planos:', planosRes.data);
+      
+      // Debug da query de mikrotiks
+      console.log('DEBUG - Query mikrotiks result:', mikrotiksRes.error, mikrotiksRes.data);
 
       setMikrotiks(mikrotiks);
       setPlanos(planosRes.data || []);
