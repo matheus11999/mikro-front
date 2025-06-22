@@ -16,6 +16,7 @@ import ReportsManagement from './components/ReportsManagement';
 import ClientDashboard from './components/ClientDashboard';
 import ClientWithdrawals from './components/ClientWithdrawals';
 import TestePix from './pages/TestePix';
+import SupabaseDebug from './debug/SupabaseDebug';
 import { supabase, testConnection, debugConfig } from './lib/supabaseClient';
 import { logger, useLogger } from './lib/logger';
 import './App.css';
@@ -225,23 +226,27 @@ const App = () => {
         // Passo 3: Buscar dados do usuário
         log.info('Step 3: Fetching user profile');
         const { data: profile, error: profileError } = await supabase
-          .from('usuarios')
-          .select('*')
+          .from('clientes')
+          .select('id, email, role, nome')
           .eq('email', session.user.email)
           .single();
 
         if (profileError) {
-          log.error('Step 3 failed: Profile fetch error', profileError);
-          // Se erro de perfil, faz logout
-          await supabase.auth.signOut();
-          setUser(null);
-        } else {
-          log.info('Step 3 completed: Profile loaded', { profile });
+          log.warn('Step 3: Profile not found in clientes table, treating as admin', profileError);
+          // Se não encontrou na tabela clientes, considerar como admin de sistema
           setUser({
             id: session.user.id,
             email: session.user.email || '',
-            role: profile.role,
-            name: profile.name
+            role: 'admin',
+            name: session.user.email?.split('@')[0] // Nome baseado no email
+          });
+        } else {
+          log.info('Step 3 completed: Profile loaded', { profile });
+          setUser({
+            id: profile.id.toString(),
+            email: profile.email,
+            role: profile.role === 'admin' ? 'admin' : 'client',
+            name: profile.nome
           });
         }
       } else {
@@ -275,22 +280,27 @@ const App = () => {
         try {
           log.info('Processing sign in event');
           const { data: profile, error } = await supabase
-            .from('usuarios')
-            .select('*')
+            .from('clientes')
+            .select('id, email, role, nome')
             .eq('email', session.user.email)
             .single();
 
           if (error) {
-            log.error('Failed to fetch profile on sign in', error);
-            setUser(null);
-            await supabase.auth.signOut();
-          } else {
-            log.info('Sign in completed successfully', { profile });
+            log.warn('Profile not found in clientes table on sign in, treating as admin', error);
+            // Se não encontrou na tabela clientes, considerar como admin de sistema
             setUser({
               id: session.user.id,
               email: session.user.email || '',
-              role: profile.role,
-              name: profile.name
+              role: 'admin',
+              name: session.user.email?.split('@')[0]
+            });
+          } else {
+            log.info('Sign in completed successfully', { profile });
+            setUser({
+              id: profile.id.toString(),
+              email: profile.email,
+              role: profile.role === 'admin' ? 'admin' : 'client',
+              name: profile.nome
             });
           }
         } catch (err) {
@@ -362,6 +372,10 @@ const App = () => {
         <Sonner />
         <Router>
           <Routes>
+            <Route 
+              path="/debug" 
+              element={<SupabaseDebug />} 
+            />
             <Route 
               path="/login" 
               element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} 

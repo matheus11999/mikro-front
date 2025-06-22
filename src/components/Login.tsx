@@ -61,7 +61,19 @@ const Login = ({ onLogin }: LoginProps) => {
 
       if (authError) {
         log.error('Authentication failed', authError);
-        setError('Email ou senha incorretos.');
+        
+        // Tratamento específico para diferentes tipos de erro
+        if (authError.message.includes('Invalid login credentials')) {
+          setError('Email ou senha incorretos.');
+        } else if (authError.message.includes('Email not confirmed')) {
+          setError('Email não confirmado. Verifique sua caixa de entrada.');
+        } else if (authError.message.includes('Too many requests')) {
+          setError('Muitas tentativas de login. Tente novamente em alguns minutos.');
+        } else if (authError.message.includes('Network')) {
+          setError('Erro de conexão. Verifique sua internet e as configurações do Supabase.');
+        } else {
+          setError(`Erro de autenticação: ${authError.message}`);
+        }
         return;
       }
 
@@ -73,22 +85,31 @@ const Login = ({ onLogin }: LoginProps) => {
 
       log.info('Authentication successful, fetching user profile');
 
-      // Verificar dados do usuário na tabela clientes (se não encontrar, considerar como admin)
+      // Verificar dados do usuário na tabela clientes
       const { data: userData, error: userError } = await supabase
         .from('clientes')
-        .select('id, role')
+        .select('id, role, nome')
         .eq('email', email.toLowerCase().trim())
         .single();
 
-      let userRole: 'admin' | 'user' = 'admin'; // Default admin
+      let userRole: 'admin' | 'user' = 'admin'; // Default admin para emails não cadastrados
       let userId = authData.user.id;
 
       if (userData && !userError) {
-        userRole = userData.role || 'user';
-        userId = userData.id;
-        log.info('User profile found in clientes table', { role: userRole, userId });
+        userRole = userData.role === 'admin' ? 'admin' : 'user';
+        userId = userData.id.toString(); // Garantir que seja string
+        log.info('User profile found in clientes table', { 
+          role: userRole, 
+          userId, 
+          userName: userData.nome 
+        });
       } else {
-        log.info('User not found in clientes table, treating as admin');
+        // Se não encontrou na tabela clientes, verificar se é um admin de sistema
+        // (emails não cadastrados em clientes são considerados admins)
+        log.info('User not found in clientes table, treating as system admin', {
+          email: email.toLowerCase().trim(),
+          authUserId: authData.user.id
+        });
       }
 
       // Login bem-sucedido
