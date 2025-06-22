@@ -65,11 +65,34 @@ function createSupabaseClient(): SupabaseClient {
   try {
     supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        persistSession: !cacheDisabled,
-        autoRefreshToken: !cacheDisabled,
+        persistSession: true,
+        autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: (typeof window !== 'undefined' && !cacheDisabled) ? window.localStorage : undefined,
-        storageKey: STORAGE_KEY
+        storage: typeof window !== 'undefined' ? {
+          getItem: (key: string) => {
+            try {
+              return window.localStorage.getItem(key);
+            } catch {
+              return null;
+            }
+          },
+          setItem: (key: string, value: string) => {
+            try {
+              window.localStorage.setItem(key, value);
+            } catch {
+              // Silently fail if localStorage is not available
+            }
+          },
+          removeItem: (key: string) => {
+            try {
+              window.localStorage.removeItem(key);
+            } catch {
+              // Silently fail if localStorage is not available
+            }
+          }
+        } : undefined,
+        storageKey: STORAGE_KEY,
+        flowType: 'pkce'
       },
       global: {
         headers: {
@@ -211,6 +234,47 @@ export async function testConnection(): Promise<boolean> {
   });
 }
 
+// Função para verificar e recuperar sessão persistida
+export async function checkPersistedSession(): Promise<any> {
+  try {
+    console.log('🔍 Verificando sessão persistida...');
+    
+    // Verificar se há sessão armazenada
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('❌ Erro ao obter sessão:', error);
+      return null;
+    }
+    
+    if (session) {
+      console.log('✅ Sessão encontrada:', session.user?.email);
+      
+      // Verificar se a sessão ainda é válida
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error('❌ Sessão inválida:', userError);
+        // Limpar sessão inválida
+        await supabase.auth.signOut();
+        return null;
+      }
+      
+      if (user) {
+        console.log('✅ Sessão válida confirmada:', user.email);
+        return session;
+      }
+    }
+    
+    console.log('📝 Nenhuma sessão válida encontrada');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Erro ao verificar sessão persistida:', error);
+    return null;
+  }
+}
+
 // Função para reinicializar conexões (útil para debug)
 export function resetConnections(): void {
   console.log('🔄 Reinicializando conexões Supabase...');
@@ -265,4 +329,21 @@ if (typeof window !== 'undefined') {
   (window as any).debugSupabase = debugConfig;
   (window as any).testSupabaseConnection = testConnection;
   (window as any).resetSupabaseConnections = resetConnections;
+  (window as any).checkSupabaseSession = checkPersistedSession;
+  
+  // Função para debug completo
+  (window as any).fullSupabaseDebug = async () => {
+    console.log('🔧 Debug Completo Supabase:');
+    console.log('📊 Config:', debugConfig());
+    console.log('🔍 Testando conexão...');
+    const connectionOk = await testConnection();
+    console.log('🔐 Verificando sessão...');
+    const session = await checkPersistedSession();
+    console.log('📋 Resumo:', {
+      connectionOk,
+      hasSession: !!session,
+      sessionUser: session?.user?.email || 'Nenhum'
+    });
+    return { connectionOk, session };
+  };
 } 

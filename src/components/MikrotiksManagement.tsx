@@ -129,6 +129,15 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     fetchData();
   }, []);
 
+  // Cleanup loading state when component unmounts
+  useEffect(() => {
+    return () => {
+      setLoading(false);
+      setError('');
+      setSuccess('');
+    };
+  }, []);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -156,7 +165,8 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       console.error('Erro ao carregar dados:', err);
       setError('Erro ao carregar dados');
     } finally {
-      setLoading(false);
+      // Garantir que loading seja sempre false no final
+      setTimeout(() => setLoading(false), 100);
     }
   };
 
@@ -176,6 +186,9 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     } catch (err: any) {
       console.error('Erro ao carregar planos:', err);
       setError('Erro ao carregar planos');
+    } finally {
+      // Garantir que loading seja false após carregar planos
+      setTimeout(() => setLoading(false), 100);
     }
   };
 
@@ -227,17 +240,17 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setLoading(true);
       setError('');
       
-             const updateData: any = {
-         nome: formData.nome,
-         provider_name: formData.provider_name,
-         profitpercentage: formData.profitpercentage,
-         status: formData.status
-       };
+      const updateData: any = {
+        nome: formData.nome,
+        provider_name: formData.provider_name,
+        profitpercentage: formData.profitpercentage,
+        status: formData.status
+      };
 
-       // Se for admin, permite alterar o cliente_id
-       if (currentUser?.role === 'admin') {
-         updateData.cliente_id = formData.cliente_id || null;
-       }
+      // Se for admin, permite alterar o cliente_id
+      if (currentUser?.role === 'admin') {
+        updateData.cliente_id = formData.cliente_id || null;
+      }
       
       const { error } = await supabase
         .from('mikrotiks')
@@ -254,7 +267,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     } catch (err: any) {
       console.error('Erro ao atualizar mikrotik:', err);
       setError('Erro ao atualizar MikroTik');
-    } finally {
       setLoading(false);
     }
   };
@@ -320,7 +332,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     } catch (err: any) {
       console.error('Erro ao excluir mikrotik:', err);
       setError(`Erro ao excluir MikroTik: ${err.message}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -352,7 +363,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     } catch (err: any) {
       console.error('Erro ao criar plano:', err);
       setError('Erro ao criar plano');
-    } finally {
       setLoading(false);
     }
   };
@@ -384,7 +394,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     } catch (err: any) {
       console.error('Erro ao atualizar plano:', err);
       setError('Erro ao atualizar plano');
-    } finally {
       setLoading(false);
     }
   };
@@ -453,12 +462,11 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setSuccess('Cliente vinculado com sucesso!');
       setShowLinkClientModal(false);
       setLinkingMikrotik(null);
-      fetchData();
+      await fetchData();
       
     } catch (err: any) {
       console.error('Erro ao vincular cliente:', err);
       setError('Erro ao vincular cliente');
-    } finally {
       setLoading(false);
     }
   };
@@ -476,12 +484,11 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       if (error) throw error;
 
       setSuccess('Cliente desvinculado com sucesso!');
-      fetchData();
+      await fetchData();
       
     } catch (err: any) {
       console.error('Erro ao desvincular cliente:', err);
       setError('Erro ao desvincular cliente');
-    } finally {
       setLoading(false);
     }
   };

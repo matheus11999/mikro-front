@@ -638,7 +638,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/users" element={<UsersManagement />} />
-            <Route path="/mikrotiks" element={<MikrotiksManagement />} />
+            <Route path="/mikrotiks" element={<MikrotiksManagement currentUser={user} />} />
             <Route path="/passwords" element={<PasswordsManagement />} />
             <Route path="/macs" element={<MacsManagement />} />
             <Route path="/withdrawals" element={<WithdrawalsManagement />} />

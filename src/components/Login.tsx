@@ -34,14 +34,21 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
 
     try {
+      console.log('🔐 Tentando fazer login com:', email);
+      
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('❌ Erro de autenticação:', authError);
+        throw authError;
+      }
 
-      if (authData.user) {
+      if (authData.user && authData.session) {
+        console.log('✅ Autenticação bem-sucedida:', authData.user.email);
+        
         // Buscar dados do usuário na tabela clientes
         const { data: userData, error: userError } = await supabase
           .from('clientes')
@@ -49,7 +56,13 @@ export default function Login({ onLogin }: LoginProps) {
           .eq('email', authData.user.email)
           .maybeSingle();
 
+        if (userError) {
+          console.error('❌ Erro ao buscar dados do usuário:', userError);
+          throw userError;
+        }
+
         if (userData) {
+          console.log('✅ Dados do usuário encontrados:', userData.email, userData.role);
           onLogin({
             id: userData.id,
             email: userData.email,
@@ -58,6 +71,7 @@ export default function Login({ onLogin }: LoginProps) {
           });
         } else if (authData.user.email === 'mateus11martins@gmail.com') {
           // Fallback para admin principal
+          console.log('✅ Fallback admin para:', authData.user.email);
           onLogin({
             id: authData.user.id,
             email: authData.user.email,
@@ -65,11 +79,16 @@ export default function Login({ onLogin }: LoginProps) {
             name: 'Admin'
           });
         } else {
+          console.error('❌ Usuário não encontrado no sistema:', authData.user.email);
+          // Fazer logout se usuário não existe no sistema
+          await supabase.auth.signOut();
           throw new Error('Usuário não encontrado no sistema');
         }
+      } else {
+        throw new Error('Falha na autenticação');
       }
     } catch (error: any) {
-      console.error('Erro ao fazer login:', error);
+      console.error('❌ Erro ao fazer login:', error);
       setError(error.message || 'Erro ao fazer login');
     } finally {
       setLoading(false);

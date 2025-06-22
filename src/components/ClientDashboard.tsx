@@ -69,6 +69,13 @@ function DashboardContent() {
     loadClientData();
   }, []);
 
+  // Cleanup loading state when component unmounts
+  useEffect(() => {
+    return () => {
+      setLoading(false);
+    };
+  }, []);
+
   const loadClientData = async () => {
     try {
       setLoading(true);
@@ -198,7 +205,8 @@ function DashboardContent() {
     } catch (error) {
       console.error('Erro ao carregar dados do cliente:', error);
     } finally {
-      setLoading(false);
+      // Garantir que loading seja sempre false no final
+      setTimeout(() => setLoading(false), 100);
     }
   };
 
@@ -494,6 +502,13 @@ function ClientMikrotiks() {
     loadData();
   }, []);
 
+  // Cleanup loading state when component unmounts
+  useEffect(() => {
+    return () => {
+      setLoading(false);
+    };
+  }, []);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -544,7 +559,8 @@ function ClientMikrotiks() {
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
-      setLoading(false);
+      // Garantir que loading seja sempre false no final
+      setTimeout(() => setLoading(false), 100);
     }
   };
 
@@ -989,6 +1005,13 @@ function ClientReports() {
     loadReportsData();
   }, [dateRange]);
 
+  // Cleanup loading state when component unmounts
+  useEffect(() => {
+    return () => {
+      setLoading(false);
+    };
+  }, []);
+
   const loadReportsData = async () => {
     try {
       setLoading(true);
@@ -1104,7 +1127,8 @@ function ClientReports() {
       console.error('Erro ao carregar relatórios:', err);
       setError('Erro ao carregar dados');
     } finally {
-      setLoading(false);
+      // Garantir que loading seja sempre false no final
+      setTimeout(() => setLoading(false), 100);
     }
   };
 
