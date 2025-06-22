@@ -5,8 +5,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_KEY;
 const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE;
 
-// Log das variáveis para debug (apenas em desenvolvimento)
-if (import.meta.env.DEV) {
+// Configurações adicionais
+const cacheDisabled = import.meta.env.VITE_CACHE === 'disabled';
+const appMode = import.meta.env.VITE_MODE || import.meta.env.MODE || 'development';
+const debugMode = appMode === 'debug' || import.meta.env.DEV;
+
+// Log das variáveis para debug (em desenvolvimento ou modo debug)
+if (debugMode) {
   console.log('🔧 Debug Supabase Config:', {
     hasUrl: !!supabaseUrl,
     urlLength: supabaseUrl?.length || 0,
@@ -14,7 +19,10 @@ if (import.meta.env.DEV) {
     anonKeyLength: supabaseAnonKey?.length || 0,
     hasServiceKey: !!supabaseServiceRoleKey,
     serviceKeyLength: supabaseServiceRoleKey?.length || 0,
-    urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'undefined'
+    urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'undefined',
+    cacheDisabled,
+    appMode,
+    debugMode
   });
 }
 
@@ -55,20 +63,22 @@ function createSupabaseClient(): SupabaseClient {
   try {
     supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
+        persistSession: !cacheDisabled,
+        autoRefreshToken: !cacheDisabled,
         detectSessionInUrl: true,
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storage: (typeof window !== 'undefined' && !cacheDisabled) ? window.localStorage : undefined,
         storageKey: STORAGE_KEY
       },
       global: {
         headers: {
-          'X-Client-Info': 'pix-mikro-web-client'
+          'X-Client-Info': 'pix-mikro-web-client',
+          'X-App-Mode': appMode,
+          'X-Cache-Mode': cacheDisabled ? 'disabled' : 'enabled'
         }
       },
       realtime: {
         params: {
-          eventsPerSecond: 10
+          eventsPerSecond: debugMode ? 20 : 10
         }
       }
     });
@@ -227,8 +237,26 @@ console.log('🚀 Supabase Client inicializado (EasyPanel):', {
   hasAnonKey: !!supabaseAnonKey,
   hasServiceKey: !!supabaseServiceRoleKey,
   mode: import.meta.env.MODE,
+  appMode,
+  cacheDisabled,
+  debugMode,
   timestamp: new Date().toISOString()
 });
+
+// Log específico para configurações de produção
+if (appMode === 'production' && !debugMode) {
+  console.log('🏭 Modo Produção ativado:', {
+    cache: cacheDisabled ? 'DESABILITADO' : 'habilitado',
+    debug: 'desabilitado',
+    logs: 'minimizados'
+  });
+} else if (debugMode) {
+  console.log('🐛 Modo Debug ativado:', {
+    cache: cacheDisabled ? 'DESABILITADO' : 'habilitado',
+    logging: 'verbose',
+    realtime: 'alta frequência'
+  });
+}
 
 // Expor função de debug globalmente para facilitar troubleshooting
 if (typeof window !== 'undefined') {

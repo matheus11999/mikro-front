@@ -16,6 +16,11 @@ interface DashboardStats {
   macsCadastrados: number;
   clientsGrowth: number;
   revenueGrowth: number;
+  lucroTotal: number;
+  lucroHoje: number;
+  lucroMes: number;
+  ticketMedio: number;
+  conversionRate: number;
 }
 
 interface RecentSale {
@@ -61,7 +66,12 @@ const AdminDashboard = () => {
     saquesPendentes: 0,
     macsCadastrados: 0,
     clientsGrowth: 0,
-    revenueGrowth: 0
+    revenueGrowth: 0,
+    lucroTotal: 0,
+    lucroHoje: 0,
+    lucroMes: 0,
+    ticketMedio: 0,
+    conversionRate: 0
   });
   
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
@@ -125,6 +135,18 @@ const AdminDashboard = () => {
         .filter(w => w.status === 'pending' || w.status === 'aguardando')
         .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
 
+      // Calcular lucro (considerando 30% como margem de lucro padrão)
+      const margemLucro = 0.3; // 30% de margem
+      const lucroTotal = receitaTotal * margemLucro;
+      const lucroHoje = receitaHoje * margemLucro;
+      const lucroMes = receitaMes * margemLucro;
+
+      // Calcular ticket médio
+      const ticketMedio = vendasAprovadas.length > 0 ? receitaTotal / vendasAprovadas.length : 0;
+
+      // Calcular taxa de conversão (vendas aprovadas / total de vendas)
+      const conversionRate = vendas.length > 0 ? (vendasAprovadas.length / vendas.length) * 100 : 0;
+
       setStats({
         totalClients: clientes.length,
         totalMikrotiks: mikrotiks.length,
@@ -137,7 +159,12 @@ const AdminDashboard = () => {
         saquesPendentes,
         macsCadastrados: macs.length,
         clientsGrowth: 12.5,
-        revenueGrowth: 8.3
+        revenueGrowth: 8.3,
+        lucroTotal,
+        lucroHoje,
+        lucroMes,
+        ticketMedio,
+        conversionRate
       });
 
       // Vendas recentes com joins
@@ -297,12 +324,12 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-6">
-        <div className="max-w-7xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-4 lg:p-6">
+        <div className="w-full">
           <div className="animate-pulse">
             <div className="h-8 bg-gray-200 rounded w-64 mb-8"></div>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
+              {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="bg-white rounded-2xl p-6 h-32"></div>
               ))}
             </div>
@@ -313,8 +340,8 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-4 lg:p-6">
+      <div className="w-full space-y-6 lg:space-y-8">
         {/* Header Section */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-indigo-600/10 rounded-3xl blur-3xl"></div>
@@ -463,7 +490,90 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Segunda linha de métricas */}
+        {/* Métricas Financeiras Avançadas */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {/* Lucro Total */}
+          <div className="group relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity duration-300"></div>
+            <div className="relative bg-white/90 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <TrendingUp className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-lg">
+                  <span className="text-xs font-bold">Lucro</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-600">Lucro Total (30%)</p>
+                <p className="text-3xl font-bold text-green-600">{formatCurrency(stats.lucroTotal)}</p>
+                <p className="text-xs text-gray-500">Hoje: {formatCurrency(stats.lucroHoje)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Ticket Médio */}
+          <div className="group relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-700 rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity duration-300"></div>
+            <div className="relative bg-white/90 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <BarChart3 className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
+                  <span className="text-xs font-bold">Médio</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-600">Ticket Médio</p>
+                <p className="text-3xl font-bold text-gray-900">{formatCurrency(stats.ticketMedio)}</p>
+                <p className="text-xs text-gray-500">Por venda aprovada</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Taxa de Conversão */}
+          <div className="group relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-700 rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity duration-300"></div>
+            <div className="relative bg-white/90 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Activity className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex items-center gap-1 text-purple-600 bg-purple-50 px-3 py-1 rounded-lg">
+                  <span className="text-xs font-bold">Taxa</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-600">Taxa de Conversão</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.conversionRate.toFixed(1)}%</p>
+                <p className="text-xs text-gray-500">Vendas aprovadas</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Receita do Mês */}
+          <div className="group relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-red-700 rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity duration-300"></div>
+            <div className="relative bg-white/90 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Calendar className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex items-center gap-1 text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
+                  <span className="text-xs font-bold">Mês</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-600">Receita do Mês</p>
+                <p className="text-3xl font-bold text-gray-900">{formatCurrency(stats.receitaMes)}</p>
+                <p className="text-xs text-gray-500">Lucro: {formatCurrency(stats.lucroMes)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Segunda linha de métricas operacionais */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
             <div className="flex items-center gap-4">
@@ -473,18 +583,6 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Total de Vendas</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.totalVendas.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Receita do Mês</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.receitaMes)}</p>
               </div>
             </div>
           </div>
@@ -509,6 +607,18 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">MACs Cadastrados</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.macsCadastrados.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-green-600 rounded-xl flex items-center justify-center">
+                <Package className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Senhas Disponíveis</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalSenhasDisponiveis.toLocaleString()}</p>
               </div>
             </div>
           </div>
