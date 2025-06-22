@@ -8,24 +8,24 @@ import {
   AlertCircle, 
   CheckCircle, 
   Loader2,
-  Sparkles,
-  Crown,
-  Zap,
-  ArrowRight,
-  WifiOff,
-  Globe
+  Building2,
+  TrendingUp,
+  Users,
+  BarChart3
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useLogger } from '@/lib/logger';
 
 interface LoginProps {
   onLogin: (userId: string, userRole: 'admin' | 'user') => void;
 }
 
 const Login = ({ onLogin }: LoginProps) => {
+  const log = useLogger('Login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,9 +36,13 @@ const Login = ({ onLogin }: LoginProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const timerId = log.startTimer('login-process');
+    log.info('Login attempt started', { email });
+    
     // Validações simples
     if (!email || !password) {
       setError('Por favor, preencha todos os campos.');
+      log.warn('Login validation failed - empty fields');
       return;
     }
 
@@ -47,6 +51,8 @@ const Login = ({ onLogin }: LoginProps) => {
     setSuccess('');
 
     try {
+      log.info('Attempting authentication');
+      
       // Primeiro, tentar autenticar
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
@@ -54,14 +60,18 @@ const Login = ({ onLogin }: LoginProps) => {
       });
 
       if (authError) {
+        log.error('Authentication failed', authError);
         setError('Email ou senha incorretos.');
         return;
       }
 
       if (!authData.user) {
+        log.error('Authentication succeeded but no user returned');
         setError('Falha na autenticação. Tente novamente.');
         return;
       }
+
+      log.info('Authentication successful, fetching user profile');
 
       // Verificar dados do usuário na tabela clientes (se não encontrar, considerar como admin)
       const { data: userData, error: userError } = await supabase
@@ -76,27 +86,22 @@ const Login = ({ onLogin }: LoginProps) => {
       if (userData && !userError) {
         userRole = userData.role || 'user';
         userId = userData.id;
-        
-        // TODO: Verificar se o usuário está ativo quando a coluna for criada
-        // if (userData.ativo === false) {
-        //   await supabase.auth.signOut();
-        //   setError('Conta desativada. Entre em contato com o administrador.');
-        //   return;
-        // }
+        log.info('User profile found in clientes table', { role: userRole, userId });
       } else {
-        // Se não encontrou na tabela clientes, pode ser um admin direto do auth
-        console.log('Usuário não encontrado na tabela clientes, considerando como admin');
+        log.info('User not found in clientes table, treating as admin');
       }
 
       // Login bem-sucedido
       setSuccess('Login realizado com sucesso!');
+      log.info('Login completed successfully', { userId, userRole });
       
       setTimeout(() => {
         onLogin(userId, userRole);
+        log.endTimer(timerId, 'login-process');
       }, 800);
 
     } catch (error) {
-      console.error('Erro no login:', error);
+      log.error('Login exception caught', error);
       setError('Erro interno do servidor. Tente novamente.');
     } finally {
       setIsLoading(false);
@@ -104,192 +109,208 @@ const Login = ({ onLogin }: LoginProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-80 h-80 bg-gradient-to-r from-blue-400/30 to-cyan-400/30 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-gradient-to-r from-purple-400/30 to-pink-400/30 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-indigo-300/20 to-purple-300/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
-        
-        {/* Floating particles */}
-        <div className="absolute top-20 left-20 w-2 h-2 bg-blue-400 rounded-full animate-bounce opacity-60" style={{ animationDelay: '0s' }}></div>
-        <div className="absolute top-32 right-32 w-1 h-1 bg-purple-400 rounded-full animate-bounce opacity-40" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute bottom-20 left-32 w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce opacity-50" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute bottom-32 right-20 w-1 h-1 bg-pink-400 rounded-full animate-bounce opacity-30" style={{ animationDelay: '3s' }}></div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex">
+      {/* Left Panel - Branding/Info */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-20 w-32 h-32 bg-white rounded-full"></div>
+          <div className="absolute top-40 right-32 w-24 h-24 bg-white rounded-full"></div>
+          <div className="absolute bottom-40 left-32 w-20 h-20 bg-white rounded-full"></div>
+          <div className="absolute bottom-20 right-20 w-28 h-28 bg-white rounded-full"></div>
+        </div>
 
-      <div className="w-full max-w-md relative z-10">
-        {/* Login Card */}
-        <div className="relative bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-8 transform hover:scale-105 transition-all duration-500">
-          {/* Glow effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-3xl blur-xl opacity-50"></div>
-          
-          {/* Content */}
-          <div className="relative z-10">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <div className="relative inline-block mb-6">
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-3xl flex items-center justify-center shadow-2xl mx-auto transform transition-all duration-300 hover:rotate-6 hover:scale-110">
-                  <div className="absolute inset-0 bg-white/20 rounded-3xl"></div>
-                  <Shield className="w-10 h-10 text-white relative z-10 drop-shadow-lg" />
-                </div>
-                {/* Crown for admin */}
-                <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                  <Crown className="w-4 h-4 text-white" />
-                </div>
-                {/* Sparkles */}
-                <Sparkles className="absolute -top-1 -left-1 w-4 h-4 text-yellow-300 animate-pulse" />
-                <Sparkles className="absolute -bottom-1 -right-1 w-3 h-3 text-blue-300 animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="relative z-10 flex flex-col justify-center p-12 text-white">
+          {/* Logo & Title */}
+          <div className="mb-12">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <Building2 className="w-7 h-7 text-white" />
               </div>
-              
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent mb-3">
-                PIX Mikro
-              </h1>
-              <p className="text-slate-300 text-lg font-medium mb-2">
-                Sistema de Gerenciamento
-              </p>
-              <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
-                <Zap className="w-4 h-4 text-yellow-400" />
-                <span>Powered by EasyPanel</span>
-                <Globe className="w-4 h-4 text-blue-400" />
+              <div>
+                <h1 className="text-3xl font-bold">PIX Mikro</h1>
+                <p className="text-blue-100 text-sm">Customer Relationship Management</p>
               </div>
             </div>
+            <h2 className="text-4xl font-bold leading-tight mb-4">
+              Gerencie seu negócio
+              <br />
+              <span className="text-blue-200">de forma inteligente</span>
+            </h2>
+            <p className="text-blue-100 text-lg leading-relaxed">
+              Plataforma completa para gestão de clientes, relatórios avançados 
+              e controle financeiro em tempo real.
+            </p>
+          </div>
 
-            {/* Error/Success Messages */}
-            {error && (
-              <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-2xl backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                    <AlertCircle className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-red-100 font-medium">{error}</p>
-                    {error.includes('servidor') && (
-                      <p className="text-red-200 text-sm mt-1 flex items-center gap-1">
-                        <WifiOff className="w-3 h-3" />
-                        Verifique as variáveis no EasyPanel
-                      </p>
-                    )}
-                  </div>
-                </div>
+          {/* Features */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <Users className="w-5 h-5" />
               </div>
-            )}
-
-            {success && (
-              <div className="mb-6 p-4 bg-green-500/20 border border-green-500/30 rounded-2xl backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <CheckCircle className="h-4 w-4 text-white" />
-                  </div>
-                  <p className="text-green-100 font-medium">{success}</p>
-                </div>
+              <div>
+                <h3 className="font-semibold">Gestão de Clientes</h3>
+                <p className="text-blue-100 text-sm">Controle completo da base de clientes</p>
               </div>
-            )}
-
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-200 font-semibold flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  Email
-                </Label>
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="relative bg-white/10 border-white/20 text-white placeholder-slate-400 h-12 rounded-xl backdrop-blur-sm focus:bg-white/20 focus:border-blue-400/50 transition-all duration-300"
-                    placeholder="seu@email.com"
-                    disabled={isLoading}
-                    autoComplete="email"
-                    required
-                  />
-                </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <BarChart3 className="w-5 h-5" />
               </div>
-
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-200 font-semibold flex items-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  Senha
-                </Label>
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="relative bg-white/10 border-white/20 text-white placeholder-slate-400 h-12 rounded-xl backdrop-blur-sm focus:bg-white/20 focus:border-purple-400/50 transition-all duration-300 pr-12"
-                    placeholder="••••••••••"
-                    disabled={isLoading}
-                    autoComplete="current-password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
-                    disabled={isLoading}
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
+              <div>
+                <h3 className="font-semibold">Relatórios Avançados</h3>
+                <p className="text-blue-100 text-sm">Analytics e insights em tempo real</p>
               </div>
-
-              {/* Login Button */}
-              <div className="pt-4">
-                <Button
-                  type="submit"
-                  className="w-full h-14 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 text-white font-bold text-lg rounded-xl shadow-2xl transform transition-all duration-300 hover:scale-105 hover:shadow-3xl relative overflow-hidden group"
-                  disabled={isLoading || !email || !password}
-                >
-                  {/* Button glow effect */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                  
-                  {isLoading ? (
-                    <div className="flex items-center justify-center gap-3">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                      <span>Entrando...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center gap-3 relative z-10">
-                      <Shield className="w-6 h-6" />
-                      <span>Entrar no Sistema</span>
-                      <ArrowRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform duration-300" />
-                    </div>
-                  )}
-                </Button>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-5 h-5" />
               </div>
-            </form>
-
-            {/* Footer */}
-            <div className="mt-8 text-center space-y-3">
-              <div className="flex items-center justify-center gap-4 text-sm text-slate-400">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <span>Sistema Online</span>
-                </div>
-                <div className="w-px h-4 bg-slate-600"></div>
-                <div className="flex items-center gap-1">
-                  <Zap className="w-3 h-3 text-yellow-400" />
-                  <span>v2.1.0</span>
-                </div>
+              <div>
+                <h3 className="font-semibold">Crescimento Sustentável</h3>
+                <p className="text-blue-100 text-sm">Ferramentas para escalar seu negócio</p>
               </div>
-              
-              <p className="text-xs text-slate-500">
-                Desenvolvido com 💜 para gestão profissional
-              </p>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Additional floating elements */}
-        <div className="absolute -top-10 -left-10 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-cyan-400/20 rounded-full blur-xl animate-pulse"></div>
-        <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-gradient-to-br from-purple-400/20 to-pink-400/20 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+      {/* Right Panel - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-8 lg:p-12">
+        <div className="w-full max-w-md">
+          {/* Mobile Logo */}
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+              <Building2 className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">PIX Mikro</h1>
+              <p className="text-gray-500 text-sm">CRM</p>
+            </div>
+          </div>
+
+          {/* Form Header */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-8 h-8 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Bem-vindo de volta
+            </h2>
+            <p className="text-gray-600">
+              Entre com suas credenciais para acessar o sistema
+            </p>
+          </div>
+
+          {/* Error/Success Messages */}
+          {error && (
+            <Alert className="mb-6 border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {success && (
+            <Alert className="mb-6 border-green-200 bg-green-50">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                {success}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email Field */}
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                Email corporativo
+              </Label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="usuario@empresa.com"
+                  disabled={isLoading}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                Senha
+              </Label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10 pr-12 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="••••••••••"
+                  disabled={isLoading}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  disabled={isLoading}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Login Button */}
+            <Button
+              type="submit"
+              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+              disabled={isLoading || !email || !password}
+            >
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Entrando...</span>
+                </div>
+              ) : (
+                'Entrar no Sistema'
+              )}
+            </Button>
+          </form>
+
+          {/* Footer */}
+          <div className="mt-8 text-center">
+            <p className="text-sm text-gray-500">
+              © 2024 PIX Mikro. Todos os direitos reservados.
+            </p>
+            <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                Sistema Online
+              </span>
+              <span>v2.1.0</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

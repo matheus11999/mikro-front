@@ -1,13 +1,73 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Edit, Trash2, Search, UserCheck, Server, TrendingUp } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { 
+  Users, 
+  UserPlus, 
+  Edit, 
+  Trash2, 
+  Search, 
+  UserCheck, 
+  TrendingUp,
+  Filter,
+  Download,
+  MoreHorizontal,
+  Mail,
+  Phone,
+  CreditCard,
+  Calendar,
+  AlertCircle,
+  CheckCircle2
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/lib/supabaseClient';
+import { useLogger } from '@/lib/logger';
+
+interface User {
+  id: string;
+  nome: string;
+  email: string;
+  chave_pix?: string;
+  whatsapp?: string;
+  saldo: number;
+  role: string;
+  status?: 'active' | 'inactive';
+  criado_em: string;
+}
 
 const UsersManagement = () => {
-  const [users, setUsers] = useState([]);
+  const log = useLogger('UsersManagement');
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -17,23 +77,49 @@ const UsersManagement = () => {
   });
 
   useEffect(() => {
-    async function fetchUsers() {
-      const { data, error } = await supabase.from('clientes').select('*');
-      if (!error) setUsers(data || []);
-      setLoading(false);
-    }
+    log.mount();
     fetchUsers();
+    
+    return () => {
+      log.unmount();
+    };
   }, []);
+
+  const fetchUsers = async () => {
+    const timerId = log.startTimer('fetch-users');
+    
+    try {
+      log.info('Fetching users');
+      const { data, error } = await supabase.from('clientes').select('*');
+      
+      if (error) {
+        log.error('Failed to fetch users', error);
+        setError('Erro ao carregar usuários');
+      } else {
+        log.info('Users fetched successfully', { count: data?.length || 0 });
+        setUsers(data || []);
+      }
+    } catch (err) {
+      log.error('Exception while fetching users', err);
+      setError('Erro inesperado ao carregar usuários');
+    } finally {
+      setLoading(false);
+      log.endTimer(timerId, 'fetch-users');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    const timerId = log.startTimer(editingUser ? 'update-user' : 'create-user');
+
     try {
       if (editingUser) {
-        // Atualizar usuário existente
-        const updateData: any = {
+        log.info('Updating user', { userId: editingUser.id });
+        
+        const updateData = {
           nome: formData.name,
           chave_pix: formData.chave_pix,
           whatsapp: formData.whatsapp
@@ -55,8 +141,10 @@ const UsersManagement = () => {
         if (error) throw error;
 
         setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...updateData } : u));
+        log.info('User updated successfully');
       } else {
-        // Criar novo usuário
+        log.info('Creating new user');
+        
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: formData.email,
           password: formData.password,
@@ -65,20 +153,7 @@ const UsersManagement = () => {
 
         if (authError) throw authError;
 
-        const { error } = await supabase.from('clientes').insert({
-          id: authData.user.id,
-          nome: formData.name,
-          email: formData.email,
-          chave_pix: formData.chave_pix,
-          whatsapp: formData.whatsapp,
-          role: 'user',
-          saldo: 0,
-          criado_em: new Date().toISOString()
-        });
-
-        if (error) throw error;
-
-        const newUser = {
+        const newUserData = {
           id: authData.user.id,
           nome: formData.name,
           email: formData.email,
@@ -89,20 +164,27 @@ const UsersManagement = () => {
           criado_em: new Date().toISOString()
         };
 
-        setUsers([...users, newUser]);
+        const { error } = await supabase.from('clientes').insert(newUserData);
+        if (error) throw error;
+
+        setUsers([...users, newUserData]);
+        log.info('User created successfully');
       }
 
       setShowModal(false);
       setFormData({ name: '', email: '', password: '', chave_pix: '', whatsapp: '' });
       setEditingUser(null);
     } catch (error: any) {
+      log.error('Failed to save user', error);
       setError(error.message || 'Erro ao processar usuário');
     } finally {
       setLoading(false);
+      log.endTimer(timerId, editingUser ? 'update-user' : 'create-user');
     }
   };
 
-  const handleEdit = (user: any) => {
+  const handleEdit = (user: User) => {
+    log.info('Editing user', { userId: user.id });
     setEditingUser(user);
     setFormData({
       name: user.nome || '',
@@ -114,369 +196,466 @@ const UsersManagement = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este usuário?')) {
-      const { error } = await supabase.from('clientes').delete().eq('id', id);
-      if (!error) {
-        setUsers(users.filter(u => u.id !== id));
+  const handleDelete = async (user: User) => {
+    if (window.confirm(`Tem certeza que deseja excluir o usuário "${user.nome}"?`)) {
+      const timerId = log.startTimer('delete-user');
+      
+      try {
+        log.info('Deleting user', { userId: user.id });
+        const { error } = await supabase.from('clientes').delete().eq('id', user.id);
+        
+        if (error) throw error;
+        
+        setUsers(users.filter(u => u.id !== user.id));
+        log.info('User deleted successfully');
+      } catch (err) {
+        log.error('Failed to delete user', err);
+        setError('Erro ao excluir usuário');
+      } finally {
+        log.endTimer(timerId, 'delete-user');
       }
     }
   };
 
-  const toggleStatus = (id: number) => {
-    setUsers(users.map(user => 
-      user.id === id 
-        ? { ...user, status: user.status === 'active' ? 'inactive' : 'active' }
-        : user
-    ));
+  const toggleStatus = async (user: User) => {
+    const newStatus = (user.status || 'active') === 'active' ? 'inactive' : 'active';
+    
+    try {
+      log.info('Toggling user status', { userId: user.id, newStatus });
+      
+      const { error } = await supabase
+        .from('clientes')
+        .update({ status: newStatus })
+        .eq('id', user.id);
+        
+      if (error) throw error;
+      
+      setUsers(users.map(u => 
+        u.id === user.id ? { ...u, status: newStatus } : u
+      ));
+      
+      log.info('User status updated successfully');
+    } catch (err) {
+      log.error('Failed to update user status', err);
+      setError('Erro ao atualizar status do usuário');
+    }
   };
 
-  const filteredUsers = users.filter(user => user.role !== 'admin');
+  const filteredUsers = users.filter(user => 
+    user.role !== 'admin' &&
+    (user.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     user.email?.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
-  if (loading) {
+  const stats = {
+    total: filteredUsers.length,
+    active: filteredUsers.filter(u => (u.status || 'active') === 'active').length,
+    withWhatsapp: filteredUsers.filter(u => u.whatsapp).length,
+    totalBalance: filteredUsers.reduce((sum, user) => sum + (user.saldo || 0), 0)
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  const getStatusBadge = (status: string) => {
+    const isActive = (status || 'active') === 'active';
     return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="loading-spinner h-12 w-12 mx-auto mb-4"></div>
-            <p className="text-gray-600 responsive-text">Carregando usuários...</p>
-          </div>
+      <Badge 
+        variant={isActive ? 'default' : 'secondary'}
+        className={isActive ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
+      >
+        {isActive ? 'Ativo' : 'Inativo'}
+      </Badge>
+    );
+  };
+
+  if (loading && users.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="responsive-title font-bold text-gray-900 flex items-center">
-            <Users className="w-6 h-6 sm:w-7 sm:h-7 mr-2 text-blue-600" />
-            <span className="hidden sm:inline">Gerenciamento de Usuários</span>
-            <span className="sm:hidden">Usuários</span>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Users className="w-8 h-8 text-blue-600" />
+            Gerenciamento de Usuários
           </h1>
-          <p className="text-gray-600 mt-1 responsive-text">Controle e administração de usuários</p>
+          <p className="text-gray-600 mt-1">
+            Controle e administração de usuários do sistema
+          </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingUser(null);
-            setFormData({ name: '', email: '', password: '', chave_pix: '', whatsapp: '' });
-            setShowModal(true);
-          }}
-          className="btn-primary flex items-center gap-2 touch-target"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span className="hidden sm:inline">Novo Usuário</span>
-          <span className="sm:hidden">Novo</span>
-        </button>
+        
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" className="gap-2">
+            <Filter className="w-4 h-4" />
+            Filtros
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2">
+            <Download className="w-4 h-4" />
+            Exportar
+          </Button>
+          <Button 
+            onClick={() => {
+              setEditingUser(null);
+              setFormData({ name: '', email: '', password: '', chave_pix: '', whatsapp: '' });
+              setShowModal(true);
+            }}
+            className="gap-2 bg-blue-600 hover:bg-blue-700"
+          >
+            <UserPlus className="w-4 h-4" />
+            Novo Usuário
+          </Button>
+        </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            {error}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
-      <div className="responsive-stats-grid">
-        <div className="stats-card-compact group hover-lift animate-slide-up">
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Users className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{filteredUsers.length}</p>
-              <p className="text-sm text-gray-600">Total</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="stats-card-compact group hover-lift animate-slide-up" style={{animationDelay: '0.1s'}}>
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-              <UserCheck className="w-5 h-5 text-green-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-lg font-bold text-gray-900 group-hover:text-green-600 transition-colors">
-                {filteredUsers.filter(u => (u.status || 'active') === 'active').length}
-              </p>
-              <p className="text-sm text-gray-600">Ativos</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="stats-card-compact group hover-lift animate-slide-up" style={{animationDelay: '0.2s'}}>
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Server className="w-5 h-5 text-yellow-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-lg font-bold text-gray-900 group-hover:text-yellow-600 transition-colors">
-                {filteredUsers.filter(u => u.whatsapp).length}
-              </p>
-              <p className="text-sm text-gray-600">WhatsApp</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="stats-card-compact group hover-lift animate-slide-up" style={{animationDelay: '0.3s'}}>
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-              <TrendingUp className="w-5 h-5 text-purple-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-lg font-bold text-gray-900 group-hover:text-purple-600 transition-colors">
-                R$ {filteredUsers.reduce((sum, user) => sum + (user.saldo || 0), 0).toFixed(2)}
-              </p>
-              <p className="text-sm text-gray-600">Saldo Total</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Users Table/Cards */}
-      <div className="data-table animate-slide-up" style={{animationDelay: '0.4s'}}>
-        <div className="table-header">
-          <h2 className="text-lg font-semibold text-gray-900">Lista de Usuários</h2>
-          <div className="flex gap-2">
-            <button className="btn-secondary text-sm flex items-center gap-2 touch-target">
-              <Search className="w-4 h-4" />
-              <span className="hidden sm:inline">Buscar</span>
-            </button>
-          </div>
-        </div>
-        
-        {/* Mobile Cards */}
-        <div className="block sm:hidden space-y-3">
-          {filteredUsers.map((user) => (
-            <div key={user.id} className="mobile-card group">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{user.nome || user.name}</h3>
-                  <p className="text-sm text-gray-500">{user.email}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(user)}
-                    className="touch-target p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    title="Editar"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    className="touch-target p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Total de Usuários
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.total}
+                </p>
               </div>
-              
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-gray-500">PIX:</span>
-                  <p className="font-mono text-blue-600 truncate">{user.chave_pix || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">WhatsApp:</span>
-                  <p className="truncate">{user.whatsapp || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Saldo:</span>
-                  <p className="font-semibold text-green-600">R$ {(user.saldo || 0).toFixed(2)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Status:</span>
-                  <button
-                    onClick={() => toggleStatus(user.id)}
-                    className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
-                      (user.status || 'active') === 'active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {(user.status || 'active') === 'active' ? 'Ativo' : 'Inativo'}
-                  </button>
-                </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-blue-600" />
               </div>
             </div>
-          ))}
-        </div>
-        
-        {/* Desktop Table */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chave PIX</th>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">WhatsApp</th>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Data</th>
-                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{user.nome || user.name}</p>
-                      <p className="text-sm text-gray-500">{user.email}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-mono bg-blue-50 text-blue-800 px-2 py-1 rounded truncate max-w-32 block">
-                      {user.chave_pix || 'N/A'}
-                    </span>
-                  </td>
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap hidden lg:table-cell">
-                    <span className="text-sm text-gray-900">
-                      {user.whatsapp || 'N/A'}
-                    </span>
-                  </td>
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-semibold text-green-600">R$ {(user.saldo || 0).toFixed(2)}</span>
-                  </td>
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => toggleStatus(user.id)}
-                      className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold touch-target ${
-                        (user.status || 'active') === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {(user.status || 'active') === 'active' ? 'Ativo' : 'Inativo'}
-                    </button>
-                  </td>
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
-                    {user.criado_em ? new Date(user.criado_em).toLocaleDateString('pt-BR') : 'N/A'}
-                  </td>
-                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                    <div className="flex space-x-1">
-                      <button
-                        onClick={() => handleEdit(user)}
-                        className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-lg touch-target"
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(user.id)}
-                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded-lg touch-target"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Usuários Ativos
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.active}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <UserCheck className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+            <div className="flex items-center mt-4 gap-2">
+              <div className="flex items-center gap-1 text-green-600">
+                <span className="text-sm font-medium">
+                  {Math.round((stats.active / stats.total) * 100)}% ativo
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Com WhatsApp
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.withWhatsapp}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <Phone className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Saldo Total
+                </p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(stats.totalBalance)}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="modal-close-btn"
-                aria-label="Fechar modal"
-              >
-                ✕
-              </button>
+      {/* Search and Table */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle className="text-lg font-semibold">
+                Lista de Usuários
+              </CardTitle>
+              <CardDescription>
+                Gerencie todos os usuários do sistema
+              </CardDescription>
             </div>
             
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                  {error}
-                </div>
-              )}
-              
-              <div className="form-group">
-                <label className="form-label">Nome Completo</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input-field"
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-80">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar usuários..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
                 />
               </div>
-              
-              <div className="form-group">
-                <label className="form-label">E-mail</label>
-                <input
-                  type="email"
-                  required={!editingUser}
-                  disabled={editingUser}
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="input-field"
-                  placeholder="usuario@exemplo.com"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Senha</label>
-                <input
-                  type="password"
-                  required={!editingUser}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="input-field"
-                  placeholder={editingUser ? 'Deixe em branco para manter a atual' : ''}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Chave PIX (opcional)</label>
-                <input
-                  type="text"
-                  value={formData.chave_pix}
-                  onChange={(e) => setFormData({ ...formData, chave_pix: e.target.value })}
-                  className="input-field"
-                  placeholder="CPF, e-mail, telefone ou chave aleatória"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">WhatsApp (opcional)</label>
-                <input
-                  type="text"
-                  value={formData.whatsapp}
-                  onChange={e => setFormData({ ...formData, whatsapp: e.target.value })}
-                  className="input-field"
-                  placeholder="(99) 99999-9999"
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Processando...' : (editingUser ? 'Atualizar' : 'Criar')}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        </CardHeader>
+        
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-gray-100">
+                <TableHead className="font-semibold">Usuário</TableHead>
+                <TableHead className="font-semibold">Contato</TableHead>
+                <TableHead className="font-semibold">PIX</TableHead>
+                <TableHead className="font-semibold">Saldo</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Criado em</TableHead>
+                <TableHead className="font-semibold">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((user) => (
+                <TableRow key={user.id} className="hover:bg-gray-50">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-semibold text-blue-600">
+                          {user.nome?.charAt(0).toUpperCase() || 'U'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{user.nome}</p>
+                        <p className="text-sm text-gray-500">{user.email}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3 h-3 text-gray-400" />
+                        <span className="text-sm text-gray-600">{user.email}</span>
+                      </div>
+                      {user.whatsapp && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3 h-3 text-gray-400" />
+                          <span className="text-sm text-gray-600">{user.whatsapp}</span>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    {user.chave_pix ? (
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-3 h-3 text-gray-400" />
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded truncate max-w-[120px] block">
+                          {user.chave_pix}
+                        </code>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">Não informado</span>
+                    )}
+                  </TableCell>
+                  
+                  <TableCell>
+                    <span className="font-semibold text-emerald-600">
+                      {formatCurrency(user.saldo || 0)}
+                    </span>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <button onClick={() => toggleStatus(user)}>
+                      {getStatusBadge(user.status || 'active')}
+                    </button>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3 h-3 text-gray-400" />
+                      <span className="text-sm text-gray-600">
+                        {formatDate(user.criado_em)}
+                      </span>
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEdit(user)}>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleDelete(user)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          
+          {filteredUsers.length === 0 && (
+            <div className="text-center py-12">
+              <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">Nenhum usuário encontrado</p>
+              <p className="text-gray-400 text-sm mt-1">
+                {searchTerm ? 'Tente ajustar sua busca' : 'Clique em "Novo Usuário" para começar'}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* User Modal */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingUser ? 'Atualize as informações do usuário' : 'Preencha os dados para criar um novo usuário'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome Completo</Label>
+              <Input
+                id="name"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Digite o nome completo"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                required={!editingUser}
+                disabled={!!editingUser}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="usuario@exemplo.com"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                required={!editingUser}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder={editingUser ? 'Deixe em branco para manter' : 'Digite uma senha segura'}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="pix">Chave PIX (opcional)</Label>
+              <Input
+                id="pix"
+                value={formData.chave_pix}
+                onChange={(e) => setFormData({ ...formData, chave_pix: e.target.value })}
+                placeholder="CPF, e-mail, telefone ou chave aleatória"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp">WhatsApp (opcional)</Label>
+              <Input
+                id="whatsapp"
+                value={formData.whatsapp}
+                onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                placeholder="(99) 99999-9999"
+              />
+            </div>
+            
+            <DialogFooter className="gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setShowModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {loading ? 'Processando...' : (editingUser ? 'Atualizar' : 'Criar')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +17,8 @@ import ClientDashboard from './components/ClientDashboard';
 import ClientWithdrawals from './components/ClientWithdrawals';
 import TestePix from './pages/TestePix';
 import { supabase, testConnection, debugConfig } from './lib/supabaseClient';
+import { logger, useLogger } from './lib/logger';
+import './App.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,420 +31,328 @@ const queryClient = new QueryClient({
 });
 
 interface User {
-  role: 'admin' | 'user';
   id: string;
   email: string;
+  role: 'admin' | 'client';
+  name?: string;
 }
 
-// Componente de erro melhorado para falhas de conexão
-const ConnectionError = ({ onRetry }: { onRetry: () => void }) => {
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-
+// Componente de erro melhorado com logs
+function ErrorScreen({ error, onRetry }: { error: string; onRetry: () => void }) {
+  const log = useLogger('ErrorScreen');
+  
   useEffect(() => {
-    setDebugInfo(debugConfig());
-  }, []);
+    log.mount({ error });
+    log.error('Error screen displayed', { error, timestamp: new Date().toISOString() });
+  }, [error]);
+
+  const handleExportLogs = () => {
+    log.info('Exporting logs for debugging');
+    logger.exportLogs();
+  };
+
+  const handleViewLogs = () => {
+    log.info('Opening console for log inspection');
+    console.log('📋 Recent Error Logs:', logger.getErrorLogs());
+    console.log('📋 Recent 5min Logs:', logger.getRecentLogs(5));
+    alert('Logs exportados para o console! Abra F12 para ver.');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-red-900 to-orange-900 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-80 h-80 bg-gradient-to-r from-red-400/20 to-orange-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-gradient-to-r from-orange-400/20 to-yellow-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-
-      <div className="relative z-10 text-center p-8 bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl max-w-2xl w-full">
-        {/* Error Icon */}
-        <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl">
-          <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
-        </div>
-
-        <h2 className="text-3xl font-bold text-white mb-4">Erro de Conexão</h2>
-        <p className="text-slate-300 text-lg mb-6">
-          Não foi possível conectar ao servidor Supabase.
-        </p>
-
-        {/* Main error info */}
-        <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-6 mb-6 text-left">
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Possíveis Causas:
-          </h3>
-          <ul className="text-slate-200 space-y-2 text-sm">
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-              Variáveis de ambiente não configuradas no EasyPanel
-            </li>
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-              Credenciais do Supabase incorretas
-            </li>
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-              Problema de conectividade com a internet
-            </li>
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-              Serviço Supabase temporariamente indisponível
-            </li>
-          </ul>
-        </div>
-
-        {/* Solution steps */}
-        <div className="bg-blue-500/20 border border-blue-500/30 rounded-2xl p-6 mb-6 text-left">
-          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Como Resolver (EasyPanel):
-          </h3>
-          <ol className="text-slate-200 space-y-2 text-sm">
-            <li className="flex gap-3">
-              <span className="text-blue-400 font-bold">1.</span>
-              <div>
-                <strong>Configure as variáveis de ambiente:</strong>
-                <div className="mt-1 bg-slate-800/50 rounded-lg p-2 font-mono text-xs">
-                  VITE_SUPABASE_URL=https://xxx.supabase.co<br />
-                  VITE_SUPABASE_KEY=eyJhbGciOi...<br />
-                  VITE_SUPABASE_SERVICE_ROLE=eyJhbGciOi...
-                </div>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-blue-400 font-bold">2.</span>
-              <span>Reinicie o container no EasyPanel</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-blue-400 font-bold">3.</span>
-              <span>Verifique se as credenciais do Supabase estão corretas</span>
-            </li>
-          </ol>
-        </div>
-
-        {/* Debug Info Toggle */}
-        <button
-          onClick={() => setShowDebug(!showDebug)}
-          className="text-slate-400 hover:text-white transition-colors text-sm mb-4 flex items-center gap-2 mx-auto"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {showDebug ? 'Ocultar' : 'Mostrar'} Informações de Debug
-        </button>
-
-        {/* Debug Info */}
-        {showDebug && debugInfo && (
-          <div className="bg-slate-800/50 border border-slate-600/30 rounded-2xl p-4 mb-6 text-left">
-            <h4 className="text-white font-semibold mb-2 text-sm">Debug Info:</h4>
-            <pre className="text-xs text-slate-300 overflow-x-auto">
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 max-w-md w-full border border-white/20 shadow-2xl">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-white mb-4">Erro de Conexão</h1>
+          <p className="text-gray-300 mb-6">{error}</p>
+          
+          <div className="space-y-3">
+            <button
+              onClick={onRetry}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+            >
+              🔄 Tentar Novamente
+            </button>
+            
+            <button
+              onClick={handleViewLogs}
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+            >
+              📋 Ver Logs (Console)
+            </button>
+            
+            <button
+              onClick={handleExportLogs}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+            >
+              📁 Exportar Logs
+            </button>
           </div>
-        )}
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <button
-            onClick={onRetry}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Tentar Novamente
-          </button>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Recarregar Página
-          </button>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-6 text-xs text-slate-500">
-          PIX Mikro v2.1.0 • EasyPanel Deploy
+          <div className="mt-6 text-xs text-gray-400 space-y-1">
+            <p>🔧 Para debug avançado:</p>
+            <p>1. Abra F12 (Console)</p>
+            <p>2. Digite: logger.getLogs()</p>
+            <p>3. Procure por erros vermelhos 🔴</p>
+          </div>
         </div>
       </div>
     </div>
   );
-};
+}
 
-const App = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [connectionError, setConnectionError] = useState(false);
-  const [appInitialized, setAppInitialized] = useState(false);
-
-  // Função para inicializar a aplicação
-  const initializeApp = async () => {
-    try {
-      setLoading(true);
-      setConnectionError(false);
-
-      console.log('🚀 Inicializando aplicação...');
-      
-      // Testar conexão com Supabase
-      const isConnected = await testConnection();
-      if (!isConnected) {
-        console.error('❌ Falha no teste de conexão');
-        throw new Error('Falha na conexão com Supabase');
-      }
-
-      console.log('✅ Aplicação inicializada com sucesso');
-      setAppInitialized(true);
-    } catch (error) {
-      console.error('❌ Erro ao inicializar aplicação:', error);
-      setConnectionError(true);
-      setAppInitialized(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+// Componente de loading melhorado com timeout
+function LoadingScreen({ message = "Carregando..." }: { message?: string }) {
+  const log = useLogger('LoadingScreen');
+  const [loadingTime, setLoadingTime] = useState(0);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    // Verificar sessão atual
-    const checkSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+    log.mount({ message });
+    const timerId = log.startTimer('loading-screen');
+    
+    // Monitorar tempo de loading
+    const interval = setInterval(() => {
+      setLoadingTime(prev => {
+        const newTime = prev + 1;
         
-        if (error) {
-          console.error('Erro ao verificar sessão:', error);
-          if (mounted) {
-            setUser(null);
-          }
-          return;
+        // Avisar se loading demorar muito
+        if (newTime === 10) {
+          log.warn('Long loading detected', { seconds: newTime, message });
+        } else if (newTime === 30) {
+          log.error('Very long loading detected', { seconds: newTime, message });
+          setShowDebug(true);
         }
-
-        if (session?.user?.email && mounted) {
-          // Buscar na tabela clientes (consistência com resto da app)
-          try {
-            const { data: clientes, error: clienteError } = await supabase
-              .from('clientes')
-              .select('id, role, email')
-              .eq('email', session.user.email)
-              .limit(1);
-
-            if (clienteError) {
-              console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
-              // Se não encontrar na tabela clientes, considerar como admin
-              setUser({
-                role: 'admin',
-                id: session.user.id,
-                email: session.user.email
-              });
-              return;
-            }
-
-            if (clientes && clientes.length > 0) {
-              setUser({
-                role: clientes[0].role || 'user',
-                id: clientes[0].id,
-                email: clientes[0].email
-              });
-            } else {
-              // Se não encontrar na tabela clientes, considerar como admin
-              setUser({
-                role: 'admin',
-                id: session.user.id,
-                email: session.user.email
-              });
-            }
-          } catch (dbError) {
-            console.error('Erro ao buscar dados do usuário:', dbError);
-            // Em caso de erro de DB, ainda permitir login como admin
-            setUser({
-              role: 'admin',
-              id: session.user.id,
-              email: session.user.email
-            });
-          }
-        } else if (mounted) {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Erro inesperado ao verificar sessão:', error);
-        if (mounted) {
-          setUser(null);
-        }
-      }
-    };
-
-    // Inicializar app e verificar sessão
-    const initialize = async () => {
-      await initializeApp();
-      if (appInitialized) {
-        await checkSession();
-      }
-    };
-
-    initialize();
-
-    // Escutar mudanças de autenticação apenas se app foi inicializada
-    let subscription: any;
-    if (appInitialized) {
-      subscription = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log('Auth state changed:', event, session?.user?.email);
-          
-          if (event === 'SIGNED_OUT' || !session?.user?.email) {
-            if (mounted) {
-              setUser(null);
-            }
-            return;
-          }
-
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            try {
-              const { data: clientes, error: clienteError } = await supabase
-                .from('clientes')
-                .select('id, role, email')
-                .eq('email', session.user.email)
-                .limit(1);
-
-              if (clienteError) {
-                console.warn('Cliente não encontrado na tabela clientes:', clienteError.message);
-                // Se não encontrar na tabela clientes, considerar como admin
-                if (mounted) {
-                  setUser({
-                    role: 'admin',
-                    id: session.user.id,
-                    email: session.user.email
-                  });
-                }
-                return;
-              }
-
-              if (clientes && clientes.length > 0 && mounted) {
-                setUser({
-                  role: clientes[0].role || 'user',
-                  id: clientes[0].id,
-                  email: clientes[0].email
-                });
-              } else if (mounted) {
-                // Se não encontrar na tabela clientes, considerar como admin
-                setUser({
-                  role: 'admin',
-                  id: session.user.id,
-                  email: session.user.email
-                });
-              }
-            } catch (error) {
-              console.error('Erro ao processar mudança de auth:', error);
-              // Em caso de erro, ainda permitir login como admin
-              if (mounted) {
-                setUser({
-                  role: 'admin',
-                  id: session.user.id,
-                  email: session.user.email
-                });
-              }
-            }
-          }
-        }
-      );
-    }
+        
+        return newTime;
+      });
+    }, 1000);
 
     return () => {
-      mounted = false;
-      if (subscription) {
-        subscription.data?.subscription?.unsubscribe();
-      }
+      clearInterval(interval);
+      log.endTimer(timerId, 'loading-screen');
+      log.unmount();
     };
-  }, [appInitialized]);
+  }, [message]);
 
+  const handleForceDebug = () => {
+    log.info('Force debug activated by user');
+    setShowDebug(true);
+    console.log('🔍 Debug Info:', {
+      loadingTime,
+      message,
+      recentLogs: logger.getRecentLogs(2),
+      errorLogs: logger.getErrorLogs()
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+      <div className="text-center">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-blue-400 rounded-full animate-spin mx-auto" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+        </div>
+        
+        <h2 className="text-xl font-semibold text-white mb-2">{message}</h2>
+        <p className="text-gray-400 mb-4">Tempo: {loadingTime}s</p>
+        
+        {(loadingTime > 5 || showDebug) && (
+          <div className="mt-6 space-y-2">
+            <button
+              onClick={handleForceDebug}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+            >
+              🔍 Debug Info
+            </button>
+            
+            {showDebug && (
+              <div className="mt-4 p-4 bg-black/50 rounded-lg text-left text-xs text-gray-300 max-w-md">
+                <p>🔍 <strong>Debug Info:</strong></p>
+                <p>⏱️ Loading há {loadingTime} segundos</p>
+                <p>📍 Operação: {message}</p>
+                <p>🔧 Abra F12 e digite: logger.getLogs()</p>
+                <p>🔴 Errors: {logger.getErrorLogs().length}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const App = () => {
+  const log = useLogger('App');
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'testing' | 'connected' | 'failed'>('testing');
+
+  // Função para inicializar aplicação com logs detalhados
+  const initializeApp = async () => {
+    const initTimerId = log.startTimer('app-initialization');
+    
+    try {
+      log.info('Starting app initialization');
+      setLoading(true);
+      setError(null);
+      setConnectionStatus('testing');
+
+      // Passo 1: Testar conexão Supabase
+      log.info('Step 1: Testing Supabase connection');
+      const connectionOk = await testConnection();
+      
+      if (!connectionOk) {
+        throw new Error('Falha na conexão com Supabase - verifique as variáveis de ambiente no EasyPanel');
+      }
+      
+      log.info('Step 1 completed: Supabase connection OK');
+      setConnectionStatus('connected');
+
+      // Passo 2: Verificar sessão existente
+      log.info('Step 2: Checking existing session');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        log.warn('Session check warning', sessionError);
+        // Não é um erro fatal, continua sem usuário logado
+      }
+
+      if (session?.user) {
+        log.info('Step 2 completed: Found existing session', { userId: session.user.id });
+        
+        // Passo 3: Buscar dados do usuário
+        log.info('Step 3: Fetching user profile');
+        const { data: profile, error: profileError } = await supabase
+          .from('usuarios')
+          .select('*')
+          .eq('email', session.user.email)
+          .single();
+
+        if (profileError) {
+          log.error('Step 3 failed: Profile fetch error', profileError);
+          // Se erro de perfil, faz logout
+          await supabase.auth.signOut();
+          setUser(null);
+        } else {
+          log.info('Step 3 completed: Profile loaded', { profile });
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            role: profile.role,
+            name: profile.name
+          });
+        }
+      } else {
+        log.info('Step 2 completed: No existing session found');
+        setUser(null);
+      }
+
+      log.info('App initialization completed successfully');
+      setError(null);
+      
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Erro desconhecido na inicialização';
+      log.error('App initialization failed', { error: errorMsg, err });
+      setError(errorMsg);
+      setConnectionStatus('failed');
+    } finally {
+      setLoading(false);
+      log.endTimer(initTimerId, 'app-initialization');
+    }
+  };
+
+  // Configurar listener de auth com logs
+  useEffect(() => {
+    log.mount();
+    log.info('Setting up auth state listener');
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      log.info('Auth state changed', { event, hasSession: !!session, userId: session?.user?.id });
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        try {
+          log.info('Processing sign in event');
+          const { data: profile, error } = await supabase
+            .from('usuarios')
+            .select('*')
+            .eq('email', session.user.email)
+            .single();
+
+          if (error) {
+            log.error('Failed to fetch profile on sign in', error);
+            setUser(null);
+            await supabase.auth.signOut();
+          } else {
+            log.info('Sign in completed successfully', { profile });
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              role: profile.role,
+              name: profile.name
+            });
+          }
+        } catch (err) {
+          log.error('Exception during sign in processing', err);
+          setUser(null);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        log.info('Processing sign out event');
+        setUser(null);
+      }
+    });
+
+    // Inicializar app
+    initializeApp();
+
+    // Cleanup
+    return () => {
+      log.info('Cleaning up auth listener');
+      subscription.unsubscribe();
+      log.unmount();
+    };
+  }, []);
+
+  // Função para lidar com login
   const handleLogin = async (userId: string, userRole: 'admin' | 'user') => {
     try {
-      setLoading(true);
-      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      log.info('Processing login', { userId, userRole });
       
-      if (error) {
-        console.error('Erro ao verificar usuário:', error);
-        return;
-      }
-
-      if (authUser?.email) {
-        setUser({
-          role: userRole,
-          id: userId,
-          email: authUser.email
-        });
-      }
-    } catch (error) {
-      console.error('Erro no login:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      setLoading(true);
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Erro ao fazer logout:', error);
-      }
-      setUser(null);
-    } catch (error) {
-      console.error('Erro inesperado no logout:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Função para deletar usuário do Auth
-  async function deleteUserFromAuth(email: string) {
-    try {
-      const { data: { users }, error } = await supabase.auth.admin.listUsers();
-      if (error) {
-        console.error('Erro ao listar usuários:', error);
+      // Buscar dados do usuário autenticado
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !authUser) {
+        log.error('Failed to get authenticated user', authError);
         return;
       }
       
-      const user = users.find(u => u.email === email);
-      if (user) {
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
-        if (deleteError) {
-          console.error('Erro ao deletar usuário:', deleteError);
-        }
-      }
-    } catch (error) {
-      console.error('Erro inesperado ao deletar usuário:', error);
+      // Converter role se necessário e criar objeto User
+      const mappedRole: 'admin' | 'client' = userRole === 'user' ? 'client' : 'admin';
+      
+      setUser({
+        id: userId,
+        email: authUser.email || '',
+        role: mappedRole
+      });
+      
+      log.info('Login successful', { userId, mappedRole });
+    } catch (err) {
+      log.error('Login processing failed', err);
     }
-  }
-
-  // Mostrar erro de conexão
-  if (connectionError) {
-    return <ConnectionError onRetry={initializeApp} />;
-  }
+  };
 
   // Loading inicial
-  if (loading || !appInitialized) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="relative mb-8">
-            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
-            <div className="absolute inset-0 w-16 h-16 border-4 border-purple-200 border-b-purple-600 rounded-full animate-spin mx-auto opacity-60" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
-          </div>
-          <h3 className="text-xl font-semibold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            {loading ? 'Carregando Sistema...' : 'Conectando ao Servidor...'}
-          </h3>
-          <p className="text-slate-600">
-            {loading ? 'Preparando interface' : 'Testando conectividade Supabase'}
-          </p>
-        </div>
-      </div>
-    );
+  if (loading) {
+    const message = connectionStatus === 'testing' 
+      ? 'Testando conexão...' 
+      : 'Carregando aplicação...';
+    return <LoadingScreen message={message} />;
+  }
+
+  // Erro de conexão
+  if (error) {
+    return <ErrorScreen error={error} onRetry={initializeApp} />;
   }
 
   return (
@@ -450,37 +360,46 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          {!user ? (
-            <Login onLogin={handleLogin} />
-          ) : (
-            <Layout userRole={user.role} onLogout={handleLogout}>
-              <Routes>
-                {user.role === 'admin' ? (
-                  <>
-                    <Route path="/dashboard" element={<AdminDashboard />} />
-                    <Route path="/users" element={<UsersManagement />} />
-                    <Route path="/mikrotiks" element={<MikrotiksManagement />} />
-                    <Route path="/passwords" element={<PasswordsManagement />} />
-                    <Route path="/macs" element={<MacsManagement />} />
-                    <Route path="/withdrawals" element={<WithdrawalsManagement />} />
-                    <Route path="/reports" element={<ReportsManagement />} />
-                    <Route path="/TestePix" element={<TestePix />} />
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  </>
-                ) : (
-                  <>
-                    <Route path="/user-dashboard" element={<ClientDashboard />} />
-                    <Route path="/user-reports" element={<ReportsManagement />} />
-                    <Route path="/user-withdrawals" element={<ClientWithdrawals />} />
-                    <Route path="/" element={<Navigate to="/user-dashboard" replace />} />
-                  </>
-                )}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Layout>
-          )}
-        </BrowserRouter>
+        <Router>
+          <Routes>
+            <Route 
+              path="/login" 
+              element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} 
+            />
+            <Route 
+              path="/*" 
+              element={user ? (
+                <Layout 
+                  userRole={user.role === 'admin' ? 'admin' : 'user'} 
+                  onLogout={() => setUser(null)}
+                >
+                  <Routes>
+                    {user.role === 'admin' ? (
+                      <>
+                        <Route path="/dashboard" element={<AdminDashboard />} />
+                        <Route path="/users" element={<UsersManagement />} />
+                        <Route path="/mikrotiks" element={<MikrotiksManagement />} />
+                        <Route path="/passwords" element={<PasswordsManagement />} />
+                        <Route path="/macs" element={<MacsManagement />} />
+                        <Route path="/withdrawals" element={<WithdrawalsManagement />} />
+                        <Route path="/reports" element={<ReportsManagement />} />
+                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      </>
+                    ) : (
+                      <>
+                        <Route path="/user-dashboard" element={<ClientDashboard />} />
+                        <Route path="/user-reports" element={<ReportsManagement />} />
+                        <Route path="/user-withdrawals" element={<ClientWithdrawals />} />
+                        <Route path="/" element={<Navigate to="/user-dashboard" replace />} />
+                      </>
+                    )}
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              ) : <Navigate to="/login" replace />} 
+            />
+          </Routes>
+        </Router>
       </TooltipProvider>
     </QueryClientProvider>
   );
