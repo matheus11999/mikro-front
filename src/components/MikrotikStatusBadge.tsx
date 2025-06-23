@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Wifi, WifiOff, Clock, Router, Activity } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatDateShort, getTimeAgo } from '@/lib/timezone';
 
 interface MikrotikStatusBadgeProps {
   isOnline: boolean;
@@ -60,20 +61,7 @@ export function MikrotikStatusBadge({
 
   const formatLastSeen = () => {
     if (!ultimoHeartbeat) return 'Nunca conectou';
-    
-    const lastSeen = new Date(ultimoHeartbeat);
-    const now = new Date();
-    const diffMs = now.getTime() - lastSeen.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    
-    if (diffMinutes < 1) return 'Agora mesmo';
-    if (diffMinutes < 60) return `${diffMinutes} min atrás`;
-    
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}h atrás`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d atrás`;
+    return getTimeAgo(ultimoHeartbeat);
   };
 
   const getTooltipContent = () => {
@@ -81,6 +69,10 @@ export function MikrotikStatusBadge({
     
     lines.push(`Status: ${statusConfig.label}`);
     lines.push(`Último heartbeat: ${formatLastSeen()}`);
+    
+    if (ultimoHeartbeat) {
+      lines.push(`Data/hora: ${formatDateShort(ultimoHeartbeat)}`);
+    }
     
     if (minutosOffline && minutosOffline > 0) {
       lines.push(`Offline há: ${minutosOffline} minutos`);

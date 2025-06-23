@@ -157,19 +157,17 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setLoading(true);
       setError('');
       
-      // Para admins, usar a API que inclui tokens
+      // Para admins, buscar todos os dados
       if (currentUser?.role === 'admin') {
-        const [mikrotiksResponse, clientesResult] = await Promise.all([
-          fetch('/api/admin/mikrotiks?show_tokens=true').then(res => {
-            if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
-            return res.json();
-          }),
+        const [mikrotiksResult, clientesResult] = await Promise.all([
+          supabase.from('mikrotiks').select('*').order('criado_em', { ascending: false }),
           supabase.from('clientes').select('id, nome, email, role')
         ]);
         
+        if (mikrotiksResult.error) throw mikrotiksResult.error;
         if (clientesResult.error) throw clientesResult.error;
         
-        setMikrotiks(mikrotiksResponse.data || []);
+        setMikrotiks(mikrotiksResult.data || []);
         setClientes(clientesResult.data || []);
       } else {
         // Para usuários normais, usar Supabase diretamente
