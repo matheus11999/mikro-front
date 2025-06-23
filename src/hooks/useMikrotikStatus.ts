@@ -4,13 +4,18 @@ import { supabase } from '@/lib/supabaseClient';
 export interface MikrotikStatus {
   id: string;
   nome: string;
-  cliente_id: string;
+  provider_name: string | null;
   status: string;
+  cliente_id: string | null;
+  criado_em: string;
+  profitpercentage: string;
   ultimo_heartbeat: string | null;
   heartbeat_version: string | null;
   heartbeat_uptime: string | null;
-  cliente_nome: string | null;
-  cliente_email: string | null;
+  api_token: string | null;
+  status_heartbeat: 'online' | 'offline' | 'never_connected';
+  status_descricao: string;
+  segundos_desde_ultimo_heartbeat: number | null;
   is_online: boolean;
   minutos_offline: number | null;
   status_conexao: 'online' | 'offline' | 'nunca_conectou';
@@ -51,14 +56,27 @@ export function useMikrotikStatus() {
         throw supabaseError;
       }
 
-      const mikrotiksComStatus = data || [];
+      // Mapear dados e calcular status
+      const mikrotiksComStatus = (data || []).map(mikrotik => ({
+        ...mikrotik,
+        is_online: mikrotik.status_heartbeat === 'online',
+        minutos_offline: mikrotik.segundos_desde_ultimo_heartbeat 
+          ? Math.floor(mikrotik.segundos_desde_ultimo_heartbeat / 60) 
+          : null,
+        status_conexao: mikrotik.status_heartbeat === 'online' 
+          ? 'online' as const
+          : mikrotik.status_heartbeat === 'never_connected' 
+            ? 'nunca_conectou' as const 
+            : 'offline' as const
+      }));
+      
       setMikrotiks(mikrotiksComStatus);
 
       // Calcular estatísticas
       const total = mikrotiksComStatus.length;
-      const online = mikrotiksComStatus.filter(m => m.is_online).length;
-      const offline = mikrotiksComStatus.filter(m => !m.is_online && m.ultimo_heartbeat).length;
-      const nunca_conectou = mikrotiksComStatus.filter(m => !m.ultimo_heartbeat).length;
+      const online = mikrotiksComStatus.filter(m => m.status_heartbeat === 'online').length;
+      const offline = mikrotiksComStatus.filter(m => m.status_heartbeat === 'offline').length;
+      const nunca_conectou = mikrotiksComStatus.filter(m => m.status_heartbeat === 'never_connected').length;
       const porcentagem_online = total > 0 ? Math.round((online / total) * 100) : 0;
 
       setEstatisticas({
