@@ -175,7 +175,15 @@ const ClientWithdrawals = () => {
 
       if (withdrawalError) {
         console.error('Erro ao solicitar saque:', withdrawalError);
-        toast.error('Erro ao solicitar saque. Tente novamente.');
+        
+        // Tratamento específico para erro de RLS
+        if (withdrawalError.code === '42501') {
+          toast.error('Erro de permissão: As políticas de segurança não estão configuradas corretamente. Entre em contato com o administrador.');
+        } else if (withdrawalError.code === '23503') {
+          toast.error('Erro de referência: Dados do cliente inválidos.');
+        } else {
+          toast.error(`Erro ao solicitar saque: ${withdrawalError.message || 'Tente novamente.'}`);
+        }
         return;
       }
 
@@ -189,7 +197,12 @@ const ClientWithdrawals = () => {
         console.error('Erro ao atualizar saldo:', updateError);
         // Reverter o saque se não conseguir atualizar saldo
         await supabase.from('withdrawals').delete().eq('id', withdrawal.id);
-        toast.error('Erro ao processar saque. Tente novamente.');
+        
+        if (updateError.code === '42501') {
+          toast.error('Erro de permissão: Não foi possível atualizar o saldo. Contate o administrador.');
+        } else {
+          toast.error(`Erro ao processar saque: ${updateError.message || 'Tente novamente.'}`);
+        }
         return;
       }
 
@@ -209,9 +222,14 @@ const ClientWithdrawals = () => {
       // Atualizar dados do usuário
       await getCurrentUser();
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro inesperado:', error);
-      toast.error('Erro inesperado. Tente novamente.');
+      
+      if (error?.code === '42501') {
+        toast.error('Erro de permissão no banco de dados. Entre em contato com o administrador.');
+      } else {
+        toast.error(`Erro inesperado: ${error?.message || 'Tente novamente.'}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -265,11 +283,22 @@ const ClientWithdrawals = () => {
         </div>
         <button 
           onClick={() => setShowRequestModal(true)}
-          className="btn-primary flex items-center gap-2 mt-4 sm:mt-0"
+          className={`flex items-center gap-2 mt-4 sm:mt-0 px-4 py-2 rounded-lg font-medium transition-colors ${
+            !currentUser || currentUser.saldo < 50
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
           disabled={!currentUser || currentUser.saldo < 50}
+          title={
+            !currentUser 
+              ? 'Carregando dados do usuário...' 
+              : currentUser.saldo < 50 
+                ? 'Saldo mínimo de R$ 50,00 necessário para saque'
+                : 'Solicitar novo saque'
+          }
         >
           <Plus className="w-4 h-4" />
-          Solicitar Saque
+          {!currentUser ? 'Carregando...' : 'Solicitar Saque'}
         </button>
       </div>
 
@@ -290,6 +319,28 @@ const ClientWithdrawals = () => {
           </div>
         </div>
       </div>
+
+      {/* Debug Info - TEMPORÁRIO */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-yellow-800 mb-2">Debug Info (só em desenvolvimento)</h3>
+          <div className="text-xs text-yellow-700 space-y-1">
+            <p>✅ Usuário logado: {currentUser ? 'Sim' : 'Não'}</p>
+            {currentUser && (
+              <>
+                <p>✅ ID do cliente: {currentUser.id}</p>
+                <p>✅ Email: {currentUser.email}</p>
+                <p>✅ Saldo: R$ {Number(currentUser.saldo || 0).toFixed(2)}</p>
+                <p>✅ Saldo maior que 50: {currentUser.saldo >= 50 ? 'Sim' : 'Não'}</p>
+                <p>✅ Chave PIX cadastrada: {currentUser.chave_pix ? `Sim (${currentUser.chave_pix})` : 'Não'}</p>
+              </>
+            )}
+            <p>✅ Botão habilitado: {(!currentUser || currentUser.saldo < 50) ? 'Não' : 'Sim'}</p>
+            <p>✅ Loading: {loading ? 'Sim' : 'Não'}</p>
+            <p>✅ Submitting: {submitting ? 'Sim' : 'Não'}</p>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
