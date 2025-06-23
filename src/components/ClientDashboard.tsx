@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import ClientWithdrawals from './ClientWithdrawals';
+import { MikrotikStatusBadge } from './MikrotikStatusBadge';
+import { useMikrotikStatus } from '../hooks/useMikrotikStatus';
 
 interface User {
   id: string;

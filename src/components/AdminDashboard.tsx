@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
+import { useMikrotikStatus } from '../hooks/useMikrotikStatus';
+import { MikrotikStatusSummary } from './MikrotikStatusBadge';
 import UsersManagement from './UsersManagement';
 import MikrotiksManagement from './MikrotiksManagement';
 import PasswordsManagement from './PasswordsManagement';
@@ -77,6 +79,7 @@ function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [recentSales, setRecentSales] = useState<any[]>([]);
+  const { estatisticas: mikrotikStats, loading: mikrotikLoading } = useMikrotikStatus();
 
   useEffect(() => {
     loadDashboardData();
@@ -379,6 +382,21 @@ function Dashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Status dos MikroTiks */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Router className="w-5 h-5" />
+          Status dos MikroTiks
+        </h3>
+        {mikrotikLoading ? (
+          <div className="animate-pulse">
+            <div className="h-12 bg-gray-200 rounded"></div>
+          </div>
+        ) : (
+          <MikrotikStatusSummary {...mikrotikStats} />
+        )}
       </div>
 
       {/* Vendas recentes e métricas */}

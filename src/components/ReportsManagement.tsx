@@ -647,8 +647,19 @@ const ReportsManagement = () => {
               <span className="text-lg font-bold text-green-600">{formatCurrency(stats.averageTicket)}</span>
             </div>
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-              <span className="text-sm font-medium text-gray-600">Total Geral</span>
+              <span className="text-sm font-medium text-gray-600">Total Aprovado</span>
               <span className="text-lg font-bold text-blue-600">
+                {formatCurrency(vendasAprovadas.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0))}
+              </span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-gray-100 rounded-lg border border-gray-200">
+              <span className="text-sm font-medium text-gray-600">
+                Total Geral 
+                <span className="text-xs text-gray-500 block">
+                  (Todas as vendas)
+                </span>
+              </span>
+              <span className="text-lg font-bold text-gray-700">
                 {formatCurrency(salesData.reduce((sum, v) => sum + (v.preco || v.valor || 0), 0))}
               </span>
             </div>

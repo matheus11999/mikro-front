@@ -14,7 +14,11 @@ import {
   Settings,
   DollarSign,
   Percent,
-  TrendingUp
+  TrendingUp,
+  Key,
+  Copy,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,7 +55,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { MikrotikStatusBadge } from './MikrotikStatusBadge';
+import { useMikrotikStatus } from '../hooks/useMikrotikStatus';
 
 interface User {
   id: string;
@@ -68,6 +75,8 @@ interface Mikrotik {
   cliente_id?: string;
   criado_em: string;
   profitpercentage: number;
+  api_token?: string;
+  api_token_masked?: string;
 }
 
 interface Plan {
@@ -95,9 +104,15 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPlansModal, setShowPlansModal] = useState(false);
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
+  const [showTokenModal, setShowTokenModal] = useState(false);
   const [selectedMikrotik, setSelectedMikrotik] = useState<Mikrotik | null>(null);
   const [editingMikrotik, setEditingMikrotik] = useState<Mikrotik | null>(null);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [generatingToken, setGeneratingToken] = useState(false);
+  
+  const { mikrotiks: mikrotiksStatus } = useMikrotikStatus();
+  const { toast } = useToast();
   
   const [mikrotiks, setMikrotiks] = useState<Mikrotik[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -129,7 +144,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     fetchData();
   }, []);
 
-  // Cleanup loading state when component unmounts
   useEffect(() => {
     return () => {
       setLoading(false);
@@ -145,28 +159,101 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       
       let mikrotiksQuery = supabase.from('mikrotiks').select('*');
       
-      // Se não for admin, filtrar apenas mikrotiks do usuário
-      if (currentUser?.role !== 'admin' && currentUser?.id) {
-        mikrotiksQuery = mikrotiksQuery.eq('cliente_id', currentUser.id);
+      if (currentUser?.role === 'admin') {
+        const response = await fetch('/api/admin/mikrotiks?show_tokens=true');
+        if (response.ok) {
+          const data = await response.json();
+          setMikrotiks(data.data || []);
+        }
+      } else {
+        if (currentUser?.id) {
+          mikrotiksQuery = mikrotiksQuery.eq('cliente_id', currentUser.id);
+        }
+        const result = await mikrotiksQuery.order('criado_em', { ascending: false });
+        if (result.error) throw result.error;
+        setMikrotiks(result.data || []);
       }
       
-      const [mikrotiksResult, clientesResult] = await Promise.all([
-        mikrotiksQuery.order('criado_em', { ascending: false }),
-        supabase.from('clientes').select('id, nome, email, role')
-      ]);
-      
-      if (mikrotiksResult.error) throw mikrotiksResult.error;
-      if (clientesResult.error) throw clientesResult.error;
-      
-      setMikrotiks(mikrotiksResult.data || []);
-      setClientes(clientesResult.data || []);
+      if (currentUser?.role === 'admin') {
+        const clientesResult = await supabase.from('clientes').select('id, nome, email, role');
+        if (clientesResult.error) throw clientesResult.error;
+        setClientes(clientesResult.data || []);
+      }
       
     } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
       setError('Erro ao carregar dados');
     } finally {
-      // Garantir que loading seja sempre false no final
       setTimeout(() => setLoading(false), 100);
+    }
+  };
+
+  const handleRegenerateToken = async (mikrotik: Mikrotik) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas administradores podem regenerar tokens",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setGeneratingToken(true);
+      
+      const response = await fetch(`/api/admin/mikrotik/${mikrotik.id}/regenerate-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao regenerar token');
+      }
+
+      const data = await response.json();
+      
+      setMikrotiks(prev => prev.map(m => 
+        m.id === mikrotik.id 
+          ? { ...m, api_token: data.data.novo_token }
+          : m
+      ));
+
+      if (selectedMikrotik?.id === mikrotik.id) {
+        setSelectedMikrotik(prev => prev ? { ...prev, api_token: data.data.novo_token } : null);
+      }
+
+      toast({
+        title: "Token regenerado",
+        description: `Novo token gerado para ${mikrotik.nome}`,
+      });
+
+    } catch (err: any) {
+      console.error('Erro ao regenerar token:', err);
+      toast({
+        title: "Erro",
+        description: "Erro ao regenerar token",
+        variant: "destructive"
+      });
+    } finally {
+      setGeneratingToken(false);
+    }
+  };
+
+  const handleCopyToken = async (token: string) => {
+    try {
+      await navigator.clipboard.writeText(token);
+      toast({
+        title: "Token copiado",
+        description: "Token copiado para a área de transferência",
+      });
+    } catch (err) {
+      toast({
+        title: "Erro",
+        description: "Erro ao copiar token",
+        variant: "destructive"
+      });
     }
   };
 
@@ -187,7 +274,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       console.error('Erro ao carregar planos:', err);
       setError('Erro ao carregar planos');
     } finally {
-      // Garantir que loading seja false após carregar planos
       setTimeout(() => setLoading(false), 100);
     }
   };
@@ -200,33 +286,32 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
 
   const handleCreateMikrotik = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       setLoading(true);
       setError('');
       
-      const mikrotikData = {
-        nome: formData.nome,
-        provider_name: formData.provider_name,
-        profitpercentage: formData.profitpercentage,
-        status: formData.status,
-        cliente_id: currentUser?.role === 'admin' ? (formData.cliente_id === 'null' ? null : formData.cliente_id || null) : currentUser?.id
-      };
-      
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('mikrotiks')
-        .insert([mikrotikData]);
+        .insert([{
+          nome: formData.nome,
+          provider_name: formData.provider_name || null,
+          profitpercentage: formData.profitpercentage,
+          status: formData.status,
+          cliente_id: formData.cliente_id || null
+        }])
+        .select()
+        .single();
       
       if (error) throw error;
       
       setSuccess('MikroTik criado com sucesso!');
       setShowAddModal(false);
       resetForm();
-      await fetchData();
+      fetchData();
       
     } catch (err: any) {
-      console.error('Erro ao criar mikrotik:', err);
-      setError('Erro ao criar MikroTik');
+      console.error('Erro ao criar MikroTik:', err);
+      setError(err.message || 'Erro ao criar MikroTik');
     } finally {
       setLoading(false);
     }
@@ -240,21 +325,15 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setLoading(true);
       setError('');
       
-      const updateData: any = {
-        nome: formData.nome,
-        provider_name: formData.provider_name,
-        profitpercentage: formData.profitpercentage,
-        status: formData.status
-      };
-
-             // Se for admin, permite alterar o cliente_id
-       if (currentUser?.role === 'admin') {
-         updateData.cliente_id = formData.cliente_id === 'null' ? null : formData.cliente_id || null;
-       }
-      
       const { error } = await supabase
         .from('mikrotiks')
-        .update(updateData)
+        .update({
+          nome: formData.nome,
+          provider_name: formData.provider_name || null,
+          profitpercentage: formData.profitpercentage,
+          status: formData.status,
+          cliente_id: formData.cliente_id || null
+        })
         .eq('id', editingMikrotik.id);
       
       if (error) throw error;
@@ -262,63 +341,50 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setSuccess('MikroTik atualizado com sucesso!');
       setShowAddModal(false);
       setEditingMikrotik(null);
-      await fetchData();
+      resetForm();
+      fetchData();
       
     } catch (err: any) {
-      console.error('Erro ao atualizar mikrotik:', err);
-      setError('Erro ao atualizar MikroTik');
+      console.error('Erro ao atualizar MikroTik:', err);
+      setError(err.message || 'Erro ao atualizar MikroTik');
+    } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteMikrotik = async (mikrotik: Mikrotik) => {
-    if (!confirm(`Tem certeza que deseja excluir o MikroTik "${mikrotik.nome}"?\n\nATENÇÃO: Todos os planos, senhas e dados relacionados também serão excluídos!`)) return;
+    if (!confirm(`Tem certeza que deseja excluir ${mikrotik.nome}? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
     
     try {
       setLoading(true);
       setError('');
       
-      // 1. Primeiro, buscar todos os planos deste MikroTik
-      const { data: planosData } = await supabase
+      const { data: planosData, error: planosError } = await supabase
         .from('planos')
         .select('id')
         .eq('mikrotik_id', mikrotik.id);
       
-      const planoIds = planosData?.map(p => p.id) || [];
-      
-      // 2. Deletar todas as senhas relacionadas aos planos deste MikroTik
-      if (planoIds.length > 0) {
-        const { error: senhasError } = await supabase
-          .from('senhas')
-          .delete()
-          .in('plano_id', planoIds);
-        
-        if (senhasError) {
-          console.warn('Erro ao deletar senhas:', senhasError);
-          // Continue mesmo se não conseguir deletar senhas
-        }
-      }
-      
-      // 3. Deletar todos os planos deste MikroTik
-      const { error: planosError } = await supabase
-        .from('planos')
-        .delete()
-        .eq('mikrotik_id', mikrotik.id);
-      
       if (planosError) throw planosError;
       
-      // 4. Deletar MACs relacionados
-      const { error: macsError } = await supabase
-        .from('macs')
-        .delete()
-        .eq('mikrotik_id', mikrotik.id);
-      
-      if (macsError) {
-        console.warn('Erro ao deletar MACs:', macsError);
-        // Continue mesmo se não conseguir deletar MACs
+      if (planosData && planosData.length > 0) {
+        setError('Não é possível excluir este MikroTik pois existem planos vinculados a ele. Exclua os planos primeiro.');
+        return;
       }
       
-      // 5. Finalmente, deletar o MikroTik
+      const { data: vendasData, error: vendasError } = await supabase
+        .from('vendas')
+        .select('id')
+        .eq('mikrotik_id', mikrotik.id);
+      
+      if (vendasError) throw vendasError;
+      
+      if (vendasData && vendasData.length > 0) {
+        setError('Não é possível excluir este MikroTik pois existem vendas vinculadas a ele.');
+        return;
+      }
+      
       const { error } = await supabase
         .from('mikrotiks')
         .delete()
@@ -326,12 +392,13 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       
       if (error) throw error;
       
-      setSuccess('MikroTik e todos os dados relacionados foram excluídos com sucesso!');
-      await fetchData();
+      setSuccess('MikroTik excluído com sucesso!');
+      fetchData();
       
     } catch (err: any) {
-      console.error('Erro ao excluir mikrotik:', err);
-      setError(`Erro ao excluir MikroTik: ${err.message}`);
+      console.error('Erro ao excluir MikroTik:', err);
+      setError(err.message || 'Erro ao excluir MikroTik');
+    } finally {
       setLoading(false);
     }
   };
@@ -358,11 +425,12 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setSuccess('Plano criado com sucesso!');
       setShowAddPlanModal(false);
       setPlanFormData({ nome: '', preco: '', duracao: 60 });
-      await fetchPlans();
+      fetchPlans();
       
     } catch (err: any) {
       console.error('Erro ao criar plano:', err);
-      setError('Erro ao criar plano');
+      setError(err.message || 'Erro ao criar plano');
+    } finally {
       setLoading(false);
     }
   };
@@ -389,19 +457,24 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setSuccess('Plano atualizado com sucesso!');
       setShowAddPlanModal(false);
       setEditingPlan(null);
-      await fetchPlans();
+      setPlanFormData({ nome: '', preco: '', duracao: 60 });
+      fetchPlans();
       
     } catch (err: any) {
       console.error('Erro ao atualizar plano:', err);
-      setError('Erro ao atualizar plano');
+      setError(err.message || 'Erro ao atualizar plano');
+    } finally {
       setLoading(false);
     }
   };
 
   const handleDeletePlan = async (plan: Plan) => {
-    if (!confirm(`Tem certeza que deseja excluir o plano "${plan.nome}"?`)) return;
+    if (!confirm(`Tem certeza que deseja excluir o plano ${plan.nome}?`)) {
+      return;
+    }
     
     try {
+      setError('');
       const { error } = await supabase
         .from('planos')
         .delete()
@@ -410,11 +483,11 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       if (error) throw error;
       
       setSuccess('Plano excluído com sucesso!');
-      await fetchPlans();
+      fetchPlans();
       
     } catch (err: any) {
       console.error('Erro ao excluir plano:', err);
-      setError('Erro ao excluir plano');
+      setError(err.message || 'Erro ao excluir plano');
     }
   };
 
@@ -424,22 +497,16 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       provider_name: '',
       profitpercentage: 10,
       status: 'Ativo',
-      cliente_id: 'null'
+      cliente_id: ''
     });
   };
 
-  const filteredMikrotiks = mikrotiks.filter(mikrotik => {
-    const matchesSearch = mikrotik.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (mikrotik.provider_name && mikrotik.provider_name.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesFilter = filterStatus === 'all' || mikrotik.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
-
   const getStatusBadge = (status: string) => {
-    if (status === 'Ativo') {
-      return <Badge className="bg-green-100 text-green-800">Ativo</Badge>;
-    }
-    return <Badge variant="secondary" className="bg-red-100 text-red-800">Inativo</Badge>;
+    return status === 'Ativo' ? (
+      <Badge className="bg-green-100 text-green-800">Ativo</Badge>
+    ) : (
+      <Badge variant="secondary">Inativo</Badge>
+    );
   };
 
   const clearMessages = () => {
@@ -449,125 +516,106 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
 
   const handleLinkClient = async (mikrotikId: string, clienteId: string) => {
     try {
-      setLoading(true);
       setError('');
-
       const { error } = await supabase
         .from('mikrotiks')
-        .update({ cliente_id: clienteId === 'null' ? null : clienteId || null })
+        .update({ cliente_id: clienteId })
         .eq('id', mikrotikId);
-
+      
       if (error) throw error;
-
+      
       setSuccess('Cliente vinculado com sucesso!');
       setShowLinkClientModal(false);
       setLinkingMikrotik(null);
-      await fetchData();
+      fetchData();
       
     } catch (err: any) {
       console.error('Erro ao vincular cliente:', err);
-      setError('Erro ao vincular cliente');
-      setLoading(false);
+      setError(err.message || 'Erro ao vincular cliente');
     }
   };
 
   const handleUnlinkClient = async (mikrotikId: string) => {
     try {
-      setLoading(true);
       setError('');
-
       const { error } = await supabase
         .from('mikrotiks')
         .update({ cliente_id: null })
         .eq('id', mikrotikId);
-
+      
       if (error) throw error;
-
+      
       setSuccess('Cliente desvinculado com sucesso!');
-      await fetchData();
+      fetchData();
       
     } catch (err: any) {
       console.error('Erro ao desvincular cliente:', err);
-      setError('Erro ao desvincular cliente');
-      setLoading(false);
+      setError(err.message || 'Erro ao desvincular cliente');
     }
   };
 
   const getClientName = (clienteId: string) => {
     const cliente = clientes.find(c => c.id === clienteId);
-    return cliente ? `${cliente.nome} (${cliente.email})` : 'Cliente não encontrado';
+    return cliente ? cliente.nome : 'Cliente não encontrado';
   };
+
+  const filteredMikrotiks = mikrotiks.filter((mikrotik) => {
+    const matchesSearch = mikrotik.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (mikrotik.provider_name && mikrotik.provider_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus = filterStatus === 'all' || mikrotik.status === filterStatus;
+    
+    return matchesSearch && matchesStatus;
+  });
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-64"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-gray-200 rounded-lg h-32"></div>
-            ))}
-          </div>
-          <div className="bg-gray-200 rounded-lg h-64"></div>
-        </div>
+      <div className="flex items-center justify-center p-8">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-lg">Carregando...</span>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {currentUser?.role === 'admin' ? 'Gerenciar MikroTiks' : 'Meu MikroTik'}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {currentUser?.role === 'admin' 
-              ? `${filteredMikrotiks.length} equipamento${filteredMikrotiks.length !== 1 ? 's' : ''} cadastrado${filteredMikrotiks.length !== 1 ? 's' : ''}`
-              : 'Configure seus equipamentos e planos'
-            }
+          <h2 className="text-3xl font-bold tracking-tight">MikroTiks</h2>
+          <p className="text-muted-foreground">
+            Gerencie seus equipamentos MikroTik e configurações
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={fetchData}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Atualizar
-          </Button>
-          <Button
-            onClick={() => {
-              clearMessages();
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            Novo MikroTik
-          </Button>
-        </div>
+        <Button 
+          onClick={() => {
+            setShowAddModal(true);
+            resetForm();
+            clearMessages();
+          }}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Adicionar MikroTik
+        </Button>
       </div>
 
-      {/* Success/Error Messages */}
-      {success && (
-        <Alert className="border-green-200 bg-green-50">
-          <CheckCircle className="w-4 h-4 text-green-600" />
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
+      {/* Messages */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
       
-      {error && (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="w-4 h-4 text-red-600" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
+      {success && (
+        <Alert className="border-green-500 bg-green-50">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800">{success}</AlertDescription>
         </Alert>
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total MikroTiks</CardTitle>
@@ -576,7 +624,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
           <CardContent>
             <div className="text-2xl font-bold">{mikrotiks.length}</div>
             <p className="text-xs text-muted-foreground">
-              {mikrotiks.filter(m => m.status === 'Ativo').length} ativos
+              Equipamentos cadastrados
             </p>
           </CardContent>
         </Card>
@@ -587,11 +635,10 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
             <Percent className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-emerald-600">
               {mikrotiks.length > 0 
                 ? (mikrotiks.reduce((acc, m) => acc + m.profitpercentage, 0) / mikrotiks.length).toFixed(1)
-                : 0
-              }%
+                : 0}%
             </div>
             <p className="text-xs text-muted-foreground">
               Média de todos os equipamentos
@@ -610,6 +657,21 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
             </div>
             <p className="text-xs text-muted-foreground">
               De {mikrotiks.length} total
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Online Agora</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {mikrotiksStatus.filter(m => m.is_online).length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Conectados no momento
             </p>
           </CardContent>
         </Card>
@@ -656,8 +718,10 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
               <TableRow>
                 <TableHead>MikroTik</TableHead>
                 {currentUser?.role === 'admin' && <TableHead>Proprietário</TableHead>}
+                <TableHead>Conexão</TableHead>
                 <TableHead>Porcentagem</TableHead>
                 <TableHead>Status</TableHead>
+                {currentUser?.role === 'admin' && <TableHead>Token API</TableHead>}
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -699,6 +763,25 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                   )}
                   
                   <TableCell>
+                    {(() => {
+                      const statusData = mikrotiksStatus.find(s => s.id === mikrotik.id);
+                      if (!statusData) {
+                        return <span className="text-xs text-gray-400">Carregando...</span>;
+                      }
+                      return (
+                        <MikrotikStatusBadge
+                          isOnline={statusData.is_online}
+                          minutosOffline={statusData.minutos_offline}
+                          ultimoHeartbeat={statusData.ultimo_heartbeat}
+                          version={statusData.heartbeat_version}
+                          uptime={statusData.heartbeat_uptime}
+                          size="sm"
+                        />
+                      );
+                    })()}
+                  </TableCell>
+                  
+                  <TableCell>
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-emerald-600" />
                       <span className="font-semibold text-emerald-600">
@@ -710,6 +793,25 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                   <TableCell>
                     {getStatusBadge(mikrotik.status)}
                   </TableCell>
+
+                  {currentUser?.role === 'admin' && (
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Key className="w-4 h-4 text-gray-400" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedMikrotik(mikrotik);
+                            setShowTokenModal(true);
+                            setShowToken(false);
+                          }}
+                        >
+                          Ver Token
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                   
                   <TableCell>
                     <DropdownMenu>
@@ -732,6 +834,17 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                         
                         {currentUser?.role === 'admin' && (
                           <>
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                setSelectedMikrotik(mikrotik);
+                                setShowTokenModal(true);
+                                setShowToken(false);
+                              }}
+                            >
+                              <Key className="w-4 h-4 mr-2" />
+                              Gerenciar Token
+                            </DropdownMenuItem>
+                            
                             <DropdownMenuItem 
                               onClick={() => {
                                 setLinkingMikrotik(mikrotik);
@@ -776,6 +889,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                           <Edit className="w-4 h-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
+                        
                         <DropdownMenuItem 
                           onClick={() => handleDeleteMikrotik(mikrotik)}
                           className="text-red-600"
@@ -790,18 +904,87 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
               ))}
             </TableBody>
           </Table>
-          
-          {filteredMikrotiks.length === 0 && (
-            <div className="text-center py-12">
-              <Router className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">Nenhum MikroTik encontrado</p>
-              <p className="text-gray-400 text-sm mt-1">
-                {searchTerm ? 'Tente ajustar sua busca' : 'Clique em "Novo MikroTik" para começar'}
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* Modal para Gerenciar Token */}
+      <Dialog open={showTokenModal} onOpenChange={setShowTokenModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5" />
+              Token API - {selectedMikrotik?.nome}
+            </DialogTitle>
+            <DialogDescription>
+              Gerencie o token de API individual deste MikroTik
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="token">Token Atual</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  id="token"
+                  type={showToken ? 'text' : 'password'}
+                  value={selectedMikrotik?.api_token || ''}
+                  readOnly
+                  className="font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowToken(!showToken)}
+                >
+                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => selectedMikrotik?.api_token && handleCopyToken(selectedMikrotik.api_token)}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Este token é único para este MikroTik e deve ser configurado no script de heartbeat.
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowTokenModal(false)}
+            >
+              Fechar
+            </Button>
+            <Button
+              onClick={() => selectedMikrotik && handleRegenerateToken(selectedMikrotik)}
+              disabled={generatingToken}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {generatingToken ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Gerando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Regenerar Token
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* MikroTik Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
