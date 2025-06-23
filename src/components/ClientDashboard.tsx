@@ -67,6 +67,15 @@ function DashboardContent() {
   });
   const [loading, setLoading] = useState(true);
   const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [connectedMacs, setConnectedMacs] = useState<any[]>([]);
+  const [salesStats, setSalesStats] = useState({
+    vendasHoje: 0,
+    valorHoje: 0,
+    vendasSemana: 0,
+    valorSemana: 0,
+    vendasMes: 0,
+    valorMes: 0
+  });
 
   useEffect(() => {
     loadClientData();
@@ -203,6 +212,29 @@ function DashboardContent() {
       const totalMacs = userMacs.length;
       const macsConectados = userMacs.filter(mac => mac.status === 'conectado').length;
 
+      // Calcular estatísticas de vendas
+      const vendasHoje = userVendasHoje.length;
+      const valorHoje = userVendasHoje.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
+      const vendasSemana = userVendasSemana.length;
+      const valorSemana = userVendasSemana.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
+      const vendasMes = userVendasMes.length;
+      const valorMes = userVendasMes.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
+
+      // Buscar MACs conectados com detalhes
+      const { data: macsDetalhados } = await supabase
+        .from('macs')
+        .select(`
+          id,
+          mac_address,
+          status,
+          connected_at,
+          mikrotiks(nome)
+        `)
+        .in('mikrotik_id', userMikrotikIds)
+        .eq('status', 'connected')
+        .order('connected_at', { ascending: false })
+        .limit(10);
+
       setStats({
         saldo: saldo,
         totalVendas: userVendasTodas.length,
@@ -215,7 +247,17 @@ function DashboardContent() {
         lucroMes: lucroMes
       });
 
+      setSalesStats({
+        vendasHoje,
+        valorHoje,
+        vendasSemana,
+        valorSemana,
+        vendasMes,
+        valorMes
+      });
+
       setRecentSales(userRecentVendas);
+      setConnectedMacs(macsDetalhados || []);
 
     } catch (error: any) {
       console.error('❌ Erro ao carregar dados do dashboard (VPS):', error);
@@ -301,7 +343,55 @@ function DashboardContent() {
         </button>
       </div>
 
-      {/* Cards de estatísticas */}
+      {/* Cards de Vendas por Período */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-800">Vendas Hoje</p>
+              <p className="text-3xl font-bold text-blue-900">{salesStats.vendasHoje}</p>
+              <p className="text-sm text-blue-700 mt-1">
+                R$ {salesStats.valorHoje.toFixed(2)}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-blue-700" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl shadow-sm border border-green-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green-800">Vendas da Semana</p>
+              <p className="text-3xl font-bold text-green-900">{salesStats.vendasSemana}</p>
+              <p className="text-sm text-green-700 mt-1">
+                R$ {salesStats.valorSemana.toFixed(2)}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-200 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-green-700" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl shadow-sm border border-purple-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-purple-800">Vendas do Mês</p>
+              <p className="text-3xl font-bold text-purple-900">{salesStats.vendasMes}</p>
+              <p className="text-sm text-purple-700 mt-1">
+                R$ {salesStats.valorMes.toFixed(2)}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-purple-200 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-purple-700" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Cards de estatísticas gerais */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
@@ -338,14 +428,14 @@ function DashboardContent() {
         <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Receita Total</p>
-              <p className="text-2xl font-bold text-green-600">R$ {stats.receitaTotal.toFixed(2)}</p>
+              <p className="text-sm font-medium text-gray-600">MACs Conectados</p>
+              <p className="text-2xl font-bold text-green-600">{stats.macsOnline}</p>
               <p className="text-xs text-gray-500 mt-1">
-                De todas as vendas
+                De {stats.totalMacs} total
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-green-600" />
+              <Wifi className="w-6 h-6 text-green-600" />
             </div>
           </div>
         </div>
@@ -361,71 +451,6 @@ function DashboardContent() {
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <Router className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Segunda linha de cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">MACs Conectados</p>
-              <p className="text-2xl font-bold text-cyan-600">
-                {stats.macsOnline} / {stats.totalMacs}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {stats.totalMacs > 0 ? ((stats.macsOnline / stats.totalMacs) * 100).toFixed(1) : 0}% online
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
-              <Wifi className="w-6 h-6 text-cyan-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Lucro Hoje</p>
-              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroHoje.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Receita do dia
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Lucro Semana</p>
-              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroSemana.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Receita da semana
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Lucro Mês</p>
-              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroMes.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Receita do mês
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-green-600" />
             </div>
           </div>
         </div>
@@ -507,6 +532,53 @@ function DashboardContent() {
                 <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p>Nenhuma venda realizada ainda</p>
                 <p className="text-sm">As vendas aparecerão aqui quando aprovadas</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* MACs Conectados */}
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">MACs Conectados</h3>
+          <div className="space-y-3">
+            {connectedMacs.length > 0 ? (
+              connectedMacs.map((mac, index) => (
+                <div key={mac.id || index} className="flex items-center justify-between p-4 rounded-lg bg-green-50 border border-green-200">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <Wifi className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 font-mono text-sm">
+                        {mac.mac_address}
+                      </p>
+                      <p className="text-sm text-blue-600 font-medium">
+                        {mac.mikrotiks?.nome || 'MikroTik'}
+                      </p>
+                      {mac.connected_at && (
+                        <p className="text-xs text-gray-500">
+                          Conectado: {new Date(mac.connected_at).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-2 py-1 rounded-full text-xs font-medium text-green-700 bg-green-100">
+                      Online
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Wifi className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum MAC conectado</p>
+                <p className="text-sm">MACs conectados aparecerão aqui</p>
               </div>
             )}
           </div>
@@ -1136,6 +1208,20 @@ function ClientReports() {
   const [dateRange, setDateRange] = useState('month');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [mikrotikFilter, setMikrotikFilter] = useState('all');
+  const [mikrotiks, setMikrotiks] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalVendas: 0,
+    valorTotal: 0,
+    lucroTotal: 0,
+    vendasAprovadas: 0,
+    vendasPendentes: 0,
+    vendasRejeitadas: 0,
+    ticketMedio: 0
+  });
 
   useEffect(() => {
     loadReportsData();
@@ -1175,18 +1261,28 @@ function ClientReports() {
       }
 
       // Buscar MikroTiks do cliente
-      const { data: mikrotiks } = await supabase
+      const { data: mikrotiksData } = await supabase
         .from('mikrotiks')
         .select('id, nome')
         .eq('cliente_id', cliente.id);
 
-      if (!mikrotiks || mikrotiks.length === 0) {
+      if (!mikrotiksData || mikrotiksData.length === 0) {
         setSalesData([]);
+        setStats({
+          totalVendas: 0,
+          valorTotal: 0,
+          lucroTotal: 0,
+          vendasAprovadas: 0,
+          vendasPendentes: 0,
+          vendasRejeitadas: 0,
+          ticketMedio: 0
+        });
         setLoading(false);
         return;
       }
 
-      const mikrotikIds = mikrotiks.map(m => m.id);
+      setMikrotiks(mikrotiksData);
+      const mikrotikIds = mikrotiksData.map(m => m.id);
 
       // Construir query com filtros de data
       let query = supabase
@@ -1217,11 +1313,16 @@ function ClientReports() {
         inicioSemana.setHours(0, 0, 0, 0);
         query = query.gte('data', inicioSemana.toISOString());
       } else if (dateRange === 'month') {
-        const monthAgo = new Date();
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        query = query.gte('data', monthAgo.toISOString());
+        const inicioMes = new Date(selectedYear, selectedMonth, 1);
+        const fimMes = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+        query = query.gte('data', inicioMes.toISOString()).lte('data', fimMes.toISOString());
       } else if (dateRange === 'custom' && startDate && endDate) {
         query = query.gte('data', startDate + 'T00:00:00').lte('data', endDate + 'T23:59:59');
+      }
+
+      // Aplicar filtro de MikroTik
+      if (mikrotikFilter !== 'all') {
+        query = query.eq('mikrotik_id', mikrotikFilter);
       }
 
       const { data: vendasData, error: queryError } = await query;
@@ -1258,12 +1359,36 @@ function ClientReports() {
       const macsMap = new Map((macsRes.data || []).map(m => [m.id, m]));
 
       // Combinar dados
-      const vendasComDados = vendas.map(venda => ({
+      let vendasComDados = vendas.map(venda => ({
         ...venda,
         mikrotiks: mikrotiksMap.get(venda.mikrotik_id),
         planos: planosMap.get(venda.plano_id),
         macs: macsMap.get(venda.mac_id)
       }));
+
+      // Aplicar filtro de status
+      if (statusFilter !== 'all') {
+        vendasComDados = vendasComDados.filter(venda => venda.status === statusFilter);
+      }
+
+      // Calcular estatísticas
+      const totalVendas = vendasComDados.length;
+      const valorTotal = vendasComDados.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
+      const lucroTotal = vendasComDados.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
+      const vendasAprovadas = vendasComDados.filter(v => v.status === 'aprovado').length;
+      const vendasPendentes = vendasComDados.filter(v => v.status === 'pendente').length;
+      const vendasRejeitadas = vendasComDados.filter(v => ['rejeitado', 'cancelado', 'expirado'].includes(v.status)).length;
+      const ticketMedio = totalVendas > 0 ? valorTotal / totalVendas : 0;
+
+      setStats({
+        totalVendas,
+        valorTotal,
+        lucroTotal,
+        vendasAprovadas,
+        vendasPendentes,
+        vendasRejeitadas,
+        ticketMedio
+      });
 
       setSalesData(vendasComDados);
 
@@ -1362,6 +1487,14 @@ function ClientReports() {
     );
   }
 
+  const months = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -1381,53 +1514,189 @@ function ClientReports() {
         </button>
       </div>
 
+      {/* Estatísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total de Vendas</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.totalVendas}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Valor Total</p>
+              <p className="text-2xl font-bold text-green-600">R$ {stats.valorTotal.toFixed(2)}</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Lucro Total</p>
+              <p className="text-2xl font-bold text-purple-600">R$ {stats.lucroTotal.toFixed(2)}</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Ticket Médio</p>
+              <p className="text-2xl font-bold text-orange-600">R$ {stats.ticketMedio.toFixed(2)}</p>
+            </div>
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-orange-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Status das Vendas */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-green-50 rounded-xl border border-green-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green-800">Vendas Aprovadas</p>
+              <p className="text-2xl font-bold text-green-900">{stats.vendasAprovadas}</p>
+            </div>
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+        </div>
+
+        <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-yellow-800">Vendas Pendentes</p>
+              <p className="text-2xl font-bold text-yellow-900">{stats.vendasPendentes}</p>
+            </div>
+            <Clock className="w-8 h-8 text-yellow-600" />
+          </div>
+        </div>
+
+        <div className="bg-red-50 rounded-xl border border-red-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-red-800">Vendas Rejeitadas</p>
+              <p className="text-2xl font-bold text-red-900">{stats.vendasRejeitadas}</p>
+            </div>
+            <X className="w-8 h-8 text-red-600" />
+          </div>
+        </div>
+      </div>
+
       {/* Filtros */}
-      <div className="bg-white rounded-xl shadow-sm border p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtros</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Período</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="today">Hoje</option>
               <option value="week">Esta semana</option>
-              <option value="month">Último mês</option>
+              <option value="month">Mês específico</option>
               <option value="custom">Período personalizado</option>
             </select>
           </div>
-          
-          {dateRange === 'custom' && (
+
+          {dateRange === 'month' && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data inicial</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mês</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {months.map((month, index) => (
+                    <option key={index} value={index}>{month}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data final</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ano</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {years.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
               </div>
             </>
           )}
           
-          <div className="flex items-end">
-            <button
-              onClick={loadReportsData}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          {dateRange === 'custom' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data inicial</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Data final</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              Filtrar
-            </button>
+              <option value="all">Todos os status</option>
+              <option value="aprovado">Aprovado</option>
+              <option value="pendente">Pendente</option>
+              <option value="processando">Processando</option>
+              <option value="rejeitado">Rejeitado</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="expirado">Expirado</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">MikroTik</label>
+            <select
+              value={mikrotikFilter}
+              onChange={(e) => setMikrotikFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos os MikroTiks</option>
+              {mikrotiks.map(mikrotik => (
+                <option key={mikrotik.id} value={mikrotik.id}>{mikrotik.nome}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
