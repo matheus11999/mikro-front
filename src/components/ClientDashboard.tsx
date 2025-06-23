@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import ClientWithdrawals from './ClientWithdrawals';
-import { DebugConnection } from './DebugConnection';
 
 interface User {
   id: string;
@@ -95,8 +94,6 @@ function DashboardContent() {
           return;
         }
 
-        console.log('🔍 DEBUG - Auth User Email:', authUser.email);
-
         // Buscar cliente diretamente por email
         const { data: cliente, error: clienteError } = await supabase
           .from('clientes')
@@ -104,14 +101,12 @@ function DashboardContent() {
           .eq('email', authUser.email)
           .single();
 
-        console.log('🔍 DEBUG - Cliente query result:', { cliente, clienteError });
-
         if (clienteError || !cliente) {
           console.error('❌ Cliente não encontrado:', clienteError);
           throw new Error('Cliente não encontrado no banco de dados');
         }
 
-        console.log('✅ DEBUG - Cliente encontrado:', cliente);
+
         return cliente;
       };
 
@@ -165,7 +160,7 @@ function DashboardContent() {
       const allMacs = macsRes.data || [];
       const allRecentVendas = recentVendasRes.data || [];
 
-      console.log('📊 DEBUG Dashboard - MikroTiks encontrados:', mikrotiks.length, mikrotiks);
+
 
       // Filtrar dados do usuário logado
       const userMikrotikIds = mikrotiks.map(m => m.id);
@@ -194,8 +189,7 @@ function DashboardContent() {
         userMikrotikIds.includes(venda.mikrotik_id)
       );
 
-      console.log('📊 DEBUG Dashboard - User MikroTik IDs:', userMikrotikIds);
-      console.log('📊 DEBUG Dashboard - User vendas todas:', userVendasTodas.length);
+
 
       // Calcular receita total e lucros por período (valor = parte do cliente)
       const receitaTotal = userVendasTodas.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
@@ -551,7 +545,6 @@ function ClientMikrotiks() {
       try {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         userEmail = authUser?.email;
-        console.log('🔍 DEBUG - Auth User via getUser():', userEmail);
       } catch (authError) {
         console.warn('⚠️ Erro ao buscar usuário via getUser():', authError);
       }
@@ -561,7 +554,6 @@ function ClientMikrotiks() {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           userEmail = session?.user?.email;
-          console.log('🔍 DEBUG - Auth User via getSession():', userEmail);
         } catch (sessionError) {
           console.warn('⚠️ Erro ao buscar sessão:', sessionError);
         }
@@ -574,7 +566,7 @@ function ClientMikrotiks() {
         return;
       }
 
-      console.log('✅ DEBUG - Email do usuário:', userEmail);
+
 
       // Buscar cliente diretamente por email
       const { data: cliente, error: clienteError } = await supabase
@@ -583,7 +575,7 @@ function ClientMikrotiks() {
         .eq('email', userEmail)
         .single();
 
-      console.log('🔍 DEBUG - Cliente query result:', { cliente, clienteError });
+
 
       if (clienteError || !cliente) {
         console.error('❌ Cliente não encontrado:', clienteError);
@@ -592,7 +584,7 @@ function ClientMikrotiks() {
         return;
       }
 
-      console.log('✅ DEBUG - Cliente encontrado:', cliente);
+
 
       // Buscar mikrotiks do cliente (sem order por enquanto para evitar erro de coluna)
       const { data: mikrotiks, error: mikrotiksError } = await supabase
@@ -600,13 +592,7 @@ function ClientMikrotiks() {
         .select('*')
         .eq('cliente_id', cliente.id);
 
-      console.log('🔍 DEBUG - Mikrotiks query:', { 
-        cliente_id: cliente.id, 
-        mikrotiks, 
-        mikrotiksError,
-        count: mikrotiks?.length || 0,
-        fullMikrotiks: mikrotiks
-      });
+
 
       if (mikrotiksError) {
         console.error('❌ Erro ao buscar mikrotiks:', mikrotiksError);
@@ -616,7 +602,6 @@ function ClientMikrotiks() {
       }
 
       const mikrotiksData = mikrotiks || [];
-      console.log('📊 DEBUG - MikroTiks encontrados:', mikrotiksData.length, mikrotiksData);
 
       // Buscar planos para os mikrotiks encontrados
       let planosData = [];
@@ -627,14 +612,14 @@ function ClientMikrotiks() {
           .select('*')
           .in('mikrotik_id', mikrotiksIds);
 
-        console.log('🔍 DEBUG - Planos query:', { mikrotiksIds, planos, planosError });
+
 
         if (!planosError) {
           planosData = planos || [];
         }
       }
 
-      console.log('📊 DEBUG - Planos encontrados:', planosData.length, planosData);
+
 
       // Atualizar estados
       setMikrotiks(mikrotiksData);
@@ -928,24 +913,16 @@ function ClientMikrotiks() {
             );
           })
         ) : (
-          <div className="col-span-full space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
-              <Router className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum MikroTik vinculado</h3>
-              <p className="text-gray-600 mb-4">
-                Entre em contato com o administrador para vincular seus equipamentos ao seu usuário.
+          <div className="col-span-full bg-white rounded-xl shadow-sm border p-12 text-center">
+            <Router className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum MikroTik vinculado</h3>
+            <p className="text-gray-600 mb-4">
+              Entre em contato com o administrador para vincular seus equipamentos ao seu usuário.
+            </p>
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-blue-700">
+                💡 <strong>Dica:</strong> Após a vinculação, você poderá criar e gerenciar planos de internet para cada equipamento.
               </p>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  💡 <strong>Dica:</strong> Após a vinculação, você poderá criar e gerenciar planos de internet para cada equipamento.
-                </p>
-              </div>
-            </div>
-            
-            {/* Debug temporário para VPS */}
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h4 className="text-lg font-semibold mb-4">🔧 Debug de Conexão (VPS)</h4>
-              <DebugConnection />
             </div>
           </div>
         )}
@@ -1104,14 +1081,24 @@ function ClientReports() {
 
       // Buscar dados do usuário atual
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
+      if (!authUser) {
+        setError('Sessão expirada. Por favor, faça login novamente.');
+        setLoading(false);
+        return;
+      }
 
       // Buscar cliente por email
-      console.log('DEBUG - Buscando cliente por email:', authUser.email);
-      const clienteRes = await supabase.from('clientes').select('*').eq('email', authUser.email).maybeSingle();
+      const { data: cliente, error: clienteError } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('email', authUser.email)
+        .single();
 
-      const cliente = clienteRes.data;
-      if (!cliente) return;
+      if (clienteError || !cliente) {
+        setError('Erro ao carregar dados do cliente');
+        setLoading(false);
+        return;
+      }
 
       // Buscar MikroTiks do cliente
       const { data: mikrotiks } = await supabase
@@ -1453,17 +1440,14 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
   const location = useLocation();
 
   const navigation = [
-    { name: 'Dashboard', href: '/client', icon: LayoutDashboard },
-    { name: 'Saques', href: '/client/withdrawals', icon: CreditCard },
-    { name: 'MikroTiks', href: '/client/mikrotiks', icon: Router },
-    { name: 'Relatórios', href: '/client/reports', icon: BarChart3 },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Saques', href: '/withdrawals', icon: CreditCard },
+    { name: 'MikroTiks', href: '/mikrotiks', icon: Router },
+    { name: 'Relatórios', href: '/reports', icon: BarChart3 },
   ];
 
   const isActivePath = (href: string) => {
-    if (href === '/client') {
-      return location.pathname === '/client' || location.pathname === '/client/';
-    }
-    return location.pathname.startsWith(href);
+    return location.pathname === href;
   };
 
   return (
@@ -1567,7 +1551,7 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
             <Route path="/withdrawals" element={<ClientWithdrawals />} />
             <Route path="/mikrotiks" element={<ClientMikrotiks />} />
             <Route path="/reports" element={<ClientReports />} />
-            <Route path="*" element={<Navigate to="/client" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>

@@ -85,7 +85,7 @@ export async function fetchCompleteUserData(email: string): Promise<UserData | n
     const user: UserData = {
       id: userData.id,
       email: userData.email,
-      role: userData.role,
+      role: userData.role === 'admin' ? 'admin' : 'user',
       name: userData.nome
     };
 
@@ -111,11 +111,23 @@ export async function checkAndRestoreSession(): Promise<UserData | null> {
       if (userData) {
         return userData;
       }
+      
+      // 3. Se o usuário é o admin principal, criar dados temporários
+      if (session.user.email === 'mateus11martins@gmail.com') {
+        const adminData: UserData = {
+          id: session.user.id,
+          email: session.user.email,
+          role: 'admin',
+          name: 'Admin'
+        };
+        saveUserData(adminData);
+        return adminData;
+      }
     }
     
-    // 3. Tentar recuperar dados salvos localmente
+    // 4. Tentar recuperar dados salvos localmente
     const savedData = getUserData();
-    if (savedData) {
+    if (savedData && session?.user?.email === savedData.email) {
       // Verificar se o usuário ainda existe no banco
       const userData = await fetchCompleteUserData(savedData.email);
       if (userData) {
@@ -123,7 +135,7 @@ export async function checkAndRestoreSession(): Promise<UserData | null> {
       }
     }
     
-    // 4. Sem sessão válida
+    // 5. Sem sessão válida
     clearUserData();
     return null;
     
@@ -139,9 +151,20 @@ export async function performLogout() {
     // Limpar dados locais
     clearUserData();
     
-    // Limpar tokens do Supabase
-    localStorage.removeItem('pix-mikro-auth-token');
-    localStorage.removeItem('sb-zzfugxcsinasxrhcwvcp-auth-token');
+    // Limpar todos os tokens do localStorage
+    const keysToRemove = [
+      'pix-mikro-auth-token',
+      'sb-zzfugxcsinasxrhcwvcp-auth-token',
+      // Adicionar outras chaves do Supabase se necessário
+    ];
+    
+    keysToRemove.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+      } catch (error) {
+        console.warn(`Erro ao remover ${key}:`, error);
+      }
+    });
     
     // Fazer signOut no Supabase
     await supabase.auth.signOut();
@@ -149,5 +172,17 @@ export async function performLogout() {
     console.log('✅ Logout completo realizado');
   } catch (error) {
     console.error('❌ Erro durante logout:', error);
+    // Continuar mesmo com erro
+  }
+}
+
+// Função para verificar se a sessão ainda é válida
+export async function isSessionValid(): Promise<boolean> {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    return !error && !!user;
+  } catch (error) {
+    console.error('❌ Erro ao verificar validade da sessão:', error);
+    return false;
   }
 } 

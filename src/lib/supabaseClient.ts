@@ -72,7 +72,7 @@ function createSupabaseClient(): SupabaseClient {
           getItem: (key: string) => {
             try {
               const item = window.localStorage.getItem(key);
-              console.log('🔍 Storage getItem:', key, !!item);
+              if (debugMode) console.log('🔍 Storage getItem:', key, !!item);
               return item;
             } catch (err) {
               console.warn('⚠️ Storage getItem error:', err);
@@ -82,7 +82,7 @@ function createSupabaseClient(): SupabaseClient {
           setItem: (key: string, value: string) => {
             try {
               window.localStorage.setItem(key, value);
-              console.log('✅ Storage setItem:', key, 'saved');
+              if (debugMode) console.log('✅ Storage setItem:', key, 'saved');
             } catch (err) {
               console.warn('⚠️ Storage setItem error:', err);
             }
@@ -90,7 +90,7 @@ function createSupabaseClient(): SupabaseClient {
           removeItem: (key: string) => {
             try {
               window.localStorage.removeItem(key);
-              console.log('🗑️ Storage removeItem:', key, 'removed');
+              if (debugMode) console.log('🗑️ Storage removeItem:', key, 'removed');
             } catch (err) {
               console.warn('⚠️ Storage removeItem error:', err);
             }
@@ -118,7 +118,7 @@ function createSupabaseClient(): SupabaseClient {
       (window as any).__SUPABASE_CLIENT__ = supabaseClientInstance;
     }
 
-    console.log('✅ Supabase Client criado com sucesso');
+    if (debugMode) console.log('✅ Supabase Client criado com sucesso');
     return supabaseClientInstance;
   } catch (error) {
     console.error('❌ Erro ao criar cliente Supabase:', error);
@@ -149,7 +149,7 @@ function createSupabaseAdminClient(): SupabaseClient {
       }
     });
 
-    console.log('✅ Supabase Admin Client criado com sucesso');
+    if (debugMode) console.log('✅ Supabase Admin Client criado com sucesso');
     return supabaseAdminInstance;
   } catch (error) {
     console.error('❌ Erro ao criar cliente admin Supabase:', error);
@@ -177,7 +177,7 @@ export async function testConnection(): Promise<boolean> {
     }, TIMEOUT);
 
     try {
-      console.log('🔍 Testando conexão com Supabase...');
+      if (debugMode) console.log('🔍 Testando conexão com Supabase...');
       
       // Teste 1: Verificar se o cliente foi criado
       if (!supabase) {
@@ -195,11 +195,11 @@ export async function testConnection(): Promise<boolean> {
       ]);
 
       const { data: { user }, error: authError } = authResult as any;
-      console.log('🔐 Teste Auth rápido:', { hasUser: !!user, authError: authError?.message });
+      if (debugMode) console.log('🔐 Teste Auth rápido:', { hasUser: !!user, authError: authError?.message });
 
       // Se auth funcionou, considerar conexão OK
       if (!authError || user) {
-        console.log('✅ Conexão Supabase OK (auth funcionando)');
+        if (debugMode) console.log('✅ Conexão Supabase OK (auth funcionando)');
         clearTimeout(timeoutId);
         resolve(true);
         return;
@@ -213,7 +213,7 @@ export async function testConnection(): Promise<boolean> {
           new Promise((_, reject) => setTimeout(() => reject(new Error('DB timeout')), 2000))
         ]);
         
-        console.log('✅ Conexão Supabase totalmente funcional');
+        if (debugMode) console.log('✅ Conexão Supabase totalmente funcional');
         clearTimeout(timeoutId);
         resolve(true);
         return;
@@ -228,11 +228,13 @@ export async function testConnection(): Promise<boolean> {
       
     } catch (error) {
       console.error('❌ Falha no teste de conexão Supabase:', error);
-      console.error('🔧 Debug info:', {
-        url: supabaseUrl?.substring(0, 30) + '...',
-        hasKey: !!supabaseAnonKey,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      if (debugMode) {
+        console.error('🔧 Debug info:', {
+          url: supabaseUrl?.substring(0, 30) + '...',
+          hasKey: !!supabaseAnonKey,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
       clearTimeout(timeoutId);
       resolve(false);
     }
@@ -242,7 +244,7 @@ export async function testConnection(): Promise<boolean> {
 // Função para verificar e recuperar sessão persistida
 export async function checkPersistedSession(): Promise<any> {
   try {
-    console.log('🔍 Verificando sessão persistida...');
+    if (debugMode) console.log('🔍 Verificando sessão persistida...');
     
     // Verificar se há sessão armazenada
     const { data: { session }, error } = await supabase.auth.getSession();
@@ -253,7 +255,7 @@ export async function checkPersistedSession(): Promise<any> {
     }
     
     if (session) {
-      console.log('✅ Sessão encontrada:', session.user?.email);
+      if (debugMode) console.log('✅ Sessão encontrada:', session.user?.email);
       
       // Verificar se a sessão ainda é válida
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -266,12 +268,12 @@ export async function checkPersistedSession(): Promise<any> {
       }
       
       if (user) {
-        console.log('✅ Sessão válida confirmada:', user.email);
+        if (debugMode) console.log('✅ Sessão válida confirmada:', user.email);
         return session;
       }
     }
     
-    console.log('📝 Nenhuma sessão válida encontrada');
+    if (debugMode) console.log('📝 Nenhuma sessão válida encontrada');
     return null;
     
   } catch (error) {
@@ -302,25 +304,23 @@ export function debugConfig(): object {
   };
 }
 
-// Log de inicialização (sempre, para debug no EasyPanel)
-console.log('🚀 Supabase Client inicializado (EasyPanel):', {
-  url: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'undefined',
-  hasAnonKey: !!supabaseAnonKey,
-  hasServiceKey: !!supabaseServiceRoleKey,
-  mode: import.meta.env.MODE,
-  appMode,
-  cacheDisabled,
-  debugMode,
-  timestamp: new Date().toISOString()
-});
+// Log de inicialização (apenas em desenvolvimento)
+if (debugMode) {
+  console.log('🚀 Supabase Client inicializado:', {
+    url: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'undefined',
+    hasAnonKey: !!supabaseAnonKey,
+    hasServiceKey: !!supabaseServiceRoleKey,
+    mode: import.meta.env.MODE,
+    appMode,
+    cacheDisabled,
+    debugMode,
+    timestamp: new Date().toISOString()
+  });
+}
 
 // Log específico para configurações de produção
 if (appMode === 'production' && !debugMode) {
-  console.log('🏭 Modo Produção ativado:', {
-    cache: cacheDisabled ? 'DESABILITADO' : 'habilitado',
-    debug: 'desabilitado',
-    logs: 'minimizados'
-  });
+  console.log('🏭 Pix Mikro - Modo Produção');
 } else if (debugMode) {
   console.log('🐛 Modo Debug ativado:', {
     cache: cacheDisabled ? 'DESABILITADO' : 'habilitado',
@@ -330,7 +330,7 @@ if (appMode === 'production' && !debugMode) {
 }
 
 // Expor função de debug globalmente para facilitar troubleshooting
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && debugMode) {
   (window as any).debugSupabase = debugConfig;
   (window as any).testSupabaseConnection = testConnection;
   (window as any).resetSupabaseConnections = resetConnections;

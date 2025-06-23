@@ -5,7 +5,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ClientDashboard from './components/ClientDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { supabase } from './lib/supabaseClient';
-import { checkAndRestoreSession, saveUserData, performLogout, UserData } from './lib/authHelpers';
+import { checkAndRestoreSession, saveUserData, performLogout, UserData, getUserData } from './lib/authHelpers';
 import { Wifi, AlertCircle, Loader2, Server } from 'lucide-react';
 import './App.css';
 
@@ -94,6 +94,7 @@ const App = () => {
   const initializingRef = useRef(false);
   const [shouldShowLogin, setShouldShowLogin] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const authListenerRef = useRef<any>(null);
 
   // Log ambiente na inicialização
   useEffect(() => {
@@ -106,8 +107,6 @@ const App = () => {
       timeouts: VPS_CONFIG
     });
   }, []);
-
-  // Removidas funções antigas - agora usando authHelpers
 
   const initializeApp = useCallback(async () => {
     // Evitar múltiplas inicializações simultâneas
@@ -153,6 +152,51 @@ const App = () => {
       initializingRef.current = false;
       setInitialized(true);
     }
+  }, []);
+
+  // Configurar listener de mudanças de autenticação
+  useEffect(() => {
+    // Limpar listener anterior se existir
+    if (authListenerRef.current) {
+      authListenerRef.current.unsubscribe();
+    }
+
+    console.log('🔐 Configurando listener de autenticação...');
+    
+    // Configurar novo listener
+    authListenerRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔄 Auth state changed:', event, session?.user?.email);
+      
+      if (event === 'SIGNED_IN' && session) {
+        // Usuário fez login
+        const userData = getUserData();
+        if (userData) {
+          setUser(userData);
+          setShouldShowLogin(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        // Usuário fez logout
+        setUser(null);
+        setShouldShowLogin(true);
+      } else if (event === 'TOKEN_REFRESHED' && session) {
+        // Token foi atualizado
+        console.log('🔄 Token atualizado');
+        // Manter usuário atual
+      } else if (event === 'USER_UPDATED' && session) {
+        // Dados do usuário foram atualizados
+        const userData = getUserData();
+        if (userData) {
+          setUser(userData);
+        }
+      }
+    });
+
+    // Cleanup
+    return () => {
+      if (authListenerRef.current) {
+        authListenerRef.current.unsubscribe();
+      }
+    };
   }, []);
 
   // Inicialização da aplicação

@@ -523,20 +523,17 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   const location = useLocation();
 
   const navigation = [
-    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-    { name: 'Usuários', href: '/admin/users', icon: Users },
-    { name: 'MikroTiks', href: '/admin/mikrotiks', icon: Router },
-    { name: 'Senhas', href: '/admin/passwords', icon: Key },
-    { name: 'MACs', href: '/admin/macs', icon: Monitor },
-    { name: 'Saques', href: '/admin/withdrawals', icon: CreditCard },
-    { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Usuários', href: '/users', icon: Users },
+    { name: 'MikroTiks', href: '/mikrotiks', icon: Router },
+    { name: 'Senhas', href: '/passwords', icon: Key },
+    { name: 'MACs', href: '/macs', icon: Monitor },
+    { name: 'Saques', href: '/withdrawals', icon: CreditCard },
+    { name: 'Relatórios', href: '/reports', icon: BarChart3 },
   ];
 
   const isActivePath = (href: string) => {
-    if (href === '/admin') {
-      return location.pathname === '/admin' || location.pathname === '/admin/';
-    }
-    return location.pathname.startsWith(href);
+    return location.pathname === href;
   };
 
   return (
@@ -643,7 +640,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
             <Route path="/macs" element={<MacsManagement />} />
             <Route path="/withdrawals" element={<WithdrawalsManagement />} />
             <Route path="/reports" element={<ReportsManagement />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
