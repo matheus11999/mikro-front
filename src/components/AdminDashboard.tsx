@@ -19,7 +19,9 @@ import {
   Wifi,
   UserCheck,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
@@ -115,13 +117,12 @@ function Dashboard() {
       ] = await Promise.all([
         supabase.from('clientes').select('id'),
         supabase.from('mikrotiks').select('id').eq('status', 'Ativo'),
-        supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado'),
+        supabase.from('vendas').select('preco, lucro, status'),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioMes.toISOString()),
         supabase.from('vendas')
-          .select('preco, data, mikrotiks(nome), planos(nome)')
-          .eq('status', 'aprovado')
+          .select('preco, data, status, mikrotiks(nome), planos(nome)')
           .order('data', { ascending: false })
           .limit(5)
       ]);
@@ -387,28 +388,56 @@ function Dashboard() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas Recentes</h3>
           <div className="space-y-3">
             {recentSales.length > 0 ? (
-              recentSales.map((sale, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Wifi className="w-4 h-4 text-blue-600" />
+              recentSales.map((sale, index) => {
+                const isPendente = (sale as any).status === 'pendente';
+                const isAprovado = (sale as any).status === 'aprovado';
+                
+                return (
+                  <div key={index} className={`flex items-center justify-between p-3 rounded-lg ${
+                    isPendente ? 'bg-yellow-50 border border-yellow-200' :
+                    isAprovado ? 'bg-gray-50' :
+                    'bg-red-50 border border-red-200'
+                  }`}>
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        isPendente ? 'bg-yellow-100' :
+                        isAprovado ? 'bg-blue-100' :
+                        'bg-red-100'
+                      }`}>
+                        {isPendente ? (
+                          <Clock className="w-4 h-4 text-yellow-600 animate-pulse" />
+                        ) : isAprovado ? (
+                          <Wifi className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {(sale as any).mikrotiks?.nome || 'MikroTik'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {(sale as any).planos?.nome || 'Plano'} - {new Date(sale.data).toLocaleDateString('pt-BR')}
+                        </p>
+                        {isPendente && (
+                          <p className="text-xs text-yellow-600 font-medium">
+                            Aguardando Pagamento
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {(sale as any).mikrotiks?.nome || 'MikroTik'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {(sale as any).planos?.nome || 'Plano'} - {new Date(sale.data).toLocaleDateString('pt-BR')}
+                    <div className="text-right">
+                      <p className={`font-semibold ${
+                        isPendente ? 'text-yellow-600' :
+                        isAprovado ? 'text-green-600' :
+                        'text-red-600'
+                      }`}>
+                        R$ {Number(sale.preco).toFixed(2)}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600">
-                      R$ {Number(sale.preco).toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />

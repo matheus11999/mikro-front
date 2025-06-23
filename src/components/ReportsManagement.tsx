@@ -17,7 +17,9 @@ import {
   PieChart,
   LineChart,
   Percent,
-  Router
+  Router,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -350,9 +352,9 @@ const ReportsManagement = () => {
         );
       case 'pendente':
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
-            <AlertCircle className="w-3 h-3 mr-1" />
-            Pendente
+          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 animate-pulse">
+            <Clock className="w-3 h-3 mr-1" />
+            Aguardando Pagamento
           </Badge>
         );
       case 'cancelado':
@@ -370,6 +372,11 @@ const ReportsManagement = () => {
         );
     }
   };
+
+  // Separar vendas pendentes das aprovadas
+  const vendasPendentes = salesData.filter(venda => venda.status === 'pendente');
+  const vendasAprovadas = salesData.filter(venda => venda.status === 'aprovado');
+  const vendasCanceladas = salesData.filter(venda => venda.status === 'cancelado');
 
   if (loading && !salesData.length) {
     return (
@@ -638,6 +645,70 @@ const ReportsManagement = () => {
         </Card>
       </div>
 
+      {/* Pagamentos Pendentes */}
+      {vendasPendentes.length > 0 && (
+        <Card className="border-yellow-200 bg-yellow-50 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-yellow-800 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Pagamentos Pendentes ({vendasPendentes.length})
+            </CardTitle>
+            <CardDescription className="text-yellow-700">
+              Vendas aguardando confirmação de pagamento
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Mikrotik</TableHead>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Tempo Pendente</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vendasPendentes.map((venda) => {
+                  const horasPendente = Math.floor((new Date().getTime() - new Date(venda.data).getTime()) / (1000 * 60 * 60));
+                  const minutosPendente = Math.floor(((new Date().getTime() - new Date(venda.data).getTime()) % (1000 * 60 * 60)) / (1000 * 60));
+                  
+                  return (
+                    <TableRow key={venda.id} className="bg-white/70">
+                      <TableCell className="font-medium">
+                        {formatDate(venda.data)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Router className="w-4 h-4 text-gray-400" />
+                          {venda.mikrotiks?.nome || 'Desconhecido'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {venda.planos?.nome || 'Desconhecido'}
+                      </TableCell>
+                      <TableCell className="font-semibold text-yellow-700">
+                        {formatCurrency(venda.preco || venda.valor || 0)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-yellow-600">
+                          <Clock className="w-3 h-3" />
+                          {horasPendente > 0 ? `${horasPendente}h ${minutosPendente}m` : `${minutosPendente}m`}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(venda.status)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sales Table */}
       <Card className="border-0 shadow-sm">
         <CardHeader>
@@ -657,7 +728,7 @@ const ReportsManagement = () => {
             </TableHeader>
             <TableBody>
               {salesData.slice(0, 10).map((venda) => (
-                <TableRow key={venda.id}>
+                <TableRow key={venda.id} className={venda.status === 'pendente' ? 'bg-yellow-50 border-l-4 border-l-yellow-400' : ''}>
                   <TableCell className="font-medium">
                     {formatDate(venda.data)}
                   </TableCell>
@@ -670,7 +741,11 @@ const ReportsManagement = () => {
                   <TableCell>
                     {venda.planos?.nome || 'Desconhecido'}
                   </TableCell>
-                  <TableCell className="font-semibold text-green-600">
+                  <TableCell className={`font-semibold ${
+                    venda.status === 'pendente' ? 'text-yellow-700' : 
+                    venda.status === 'aprovado' ? 'text-green-600' : 
+                    'text-red-600'
+                  }`}>
                     {formatCurrency(venda.preco || venda.valor || 0)}
                   </TableCell>
                   <TableCell>

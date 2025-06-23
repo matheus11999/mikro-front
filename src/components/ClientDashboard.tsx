@@ -19,7 +19,8 @@ import {
   Calendar,
   Plus,
   Edit,
-  Trash2
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import ClientWithdrawals from './ClientWithdrawals';
@@ -132,12 +133,12 @@ function DashboardContent() {
 
       const loadAllData = Promise.all([
         supabase.from('mikrotiks').select('id, nome, status').eq('cliente_id', cliente.id).eq('status', 'Ativo'),
-        supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado'),
+        supabase.from('vendas').select('preco, valor, mikrotik_id, status, data'),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
         supabase.from('vendas').select('preco, valor, mikrotik_id, status, data').eq('status', 'aprovado').gte('data', inicioMes.toISOString()),
         supabase.from('macs').select('id, mikrotik_id, status'),
-        supabase.from('vendas').select('*, mikrotiks(nome), planos(nome)').eq('status', 'aprovado').order('data', { ascending: false }).limit(10)
+        supabase.from('vendas').select('*, mikrotiks(nome), planos(nome)').order('data', { ascending: false }).limit(10)
       ]);
 
       const results = await Promise.race([loadAllData, dataTimeout]) as any[];
@@ -434,45 +435,71 @@ function DashboardContent() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas Recentes</h3>
           <div className="space-y-3">
             {recentSales.length > 0 ? (
-              recentSales.map((sale, index) => (
-                <div key={sale.id || index} className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
+              recentSales.map((sale, index) => {
+                const isPendente = sale.status === 'pendente';
+                const isAprovado = sale.status === 'aprovado';
+                const isCancelado = sale.status === 'cancelado';
+                
+                return (
+                  <div key={sale.id || index} className={`flex items-center justify-between p-4 rounded-lg ${
+                    isPendente ? 'bg-yellow-50 border border-yellow-200' :
+                    isAprovado ? 'bg-green-50' :
+                    'bg-red-50 border border-red-200'
+                  }`}>
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        isPendente ? 'bg-yellow-100' :
+                        isAprovado ? 'bg-green-100' :
+                        'bg-red-100'
+                      }`}>
+                        {isPendente ? (
+                          <Clock className="w-4 h-4 text-yellow-600 animate-pulse" />
+                        ) : isAprovado ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          R$ {parseFloat(sale.preco || '0').toFixed(2)}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(sale.data).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                        <p className="text-xs text-blue-600 font-medium">
+                          {sale.mikrotiks?.nome || 'MikroTik'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        R$ {parseFloat(sale.preco || '0').toFixed(2)}
+                    <div className="text-right">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        isPendente ? 'text-yellow-700 bg-yellow-100' :
+                        isAprovado ? 'text-green-600 bg-green-100' :
+                        'text-red-600 bg-red-100'
+                      }`}>
+                        {isPendente ? 'Aguardando Pagamento' :
+                         isAprovado ? 'Aprovado' :
+                         'Cancelado'}
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {sale.planos?.nome || 'Plano'}
                       </p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(sale.data).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                      <p className="text-xs text-blue-600 font-medium">
-                        {sale.mikrotiks?.nome || 'MikroTik'}
-                      </p>
+                      {sale.lucro && isAprovado && (
+                        <p className="text-xs text-green-600 font-medium mt-1">
+                          Lucro: R$ {parseFloat(sale.lucro).toFixed(2)}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="px-2 py-1 rounded-full text-xs font-medium text-green-600 bg-green-100">
-                      Aprovado
-                    </span>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {sale.planos?.nome || 'Plano'}
-                    </p>
-                    {sale.lucro && (
-                      <p className="text-xs text-green-600 font-medium mt-1">
-                        Lucro: R$ {parseFloat(sale.lucro).toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
