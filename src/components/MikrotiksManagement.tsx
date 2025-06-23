@@ -157,32 +157,39 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       setLoading(true);
       setError('');
       
-      let mikrotiksQuery = supabase.from('mikrotiks').select('*');
-      
+      // Para admins, usar a API que inclui tokens
       if (currentUser?.role === 'admin') {
-        const response = await fetch('/api/admin/mikrotiks?show_tokens=true');
-        if (response.ok) {
-          const data = await response.json();
-          setMikrotiks(data.data || []);
-        }
+        const [mikrotiksResponse, clientesResult] = await Promise.all([
+          fetch('/api/admin/mikrotiks?show_tokens=true').then(res => {
+            if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
+            return res.json();
+          }),
+          supabase.from('clientes').select('id, nome, email, role')
+        ]);
+        
+        if (clientesResult.error) throw clientesResult.error;
+        
+        setMikrotiks(mikrotiksResponse.data || []);
+        setClientes(clientesResult.data || []);
       } else {
+        // Para usuários normais, usar Supabase diretamente
+        let mikrotiksQuery = supabase.from('mikrotiks').select('*');
+        
         if (currentUser?.id) {
           mikrotiksQuery = mikrotiksQuery.eq('cliente_id', currentUser.id);
         }
-        const result = await mikrotiksQuery.order('criado_em', { ascending: false });
-        if (result.error) throw result.error;
-        setMikrotiks(result.data || []);
-      }
-      
-      if (currentUser?.role === 'admin') {
-        const clientesResult = await supabase.from('clientes').select('id, nome, email, role');
-        if (clientesResult.error) throw clientesResult.error;
-        setClientes(clientesResult.data || []);
+        
+        const mikrotiksResult = await mikrotiksQuery.order('criado_em', { ascending: false });
+        
+        if (mikrotiksResult.error) throw mikrotiksResult.error;
+        
+        setMikrotiks(mikrotiksResult.data || []);
+        setClientes([]);
       }
       
     } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
-      setError('Erro ao carregar dados');
+      setError(err instanceof Error ? err.message : 'Erro ao carregar dados');
     } finally {
       setTimeout(() => setLoading(false), 100);
     }
