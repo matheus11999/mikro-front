@@ -139,18 +139,41 @@ export default function WithdrawalsManagement() {
       try {
         setUploading(true);
         
-        // Gerar nome único para o arquivo
-        const fileExt = proofFile.name.split('.').pop();
-        const fileName = `${selectedWithdrawal.id}_${Date.now()}.${fileExt}`;
+        // Validar tipo de arquivo
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
+        if (!allowedTypes.includes(proofFile.type)) {
+          toast.error('Tipo de arquivo não suportado. Use JPG, PNG, GIF ou PDF.');
+          return;
+        }
+
+        // Validar tamanho (máx 10MB)
+        if (proofFile.size > 10 * 1024 * 1024) {
+          toast.error('Arquivo muito grande. Máximo 10MB.');
+          return;
+        }
         
-        // Upload para o Supabase Storage
+        // Gerar nome único para o arquivo
+        const fileExt = proofFile.name.split('.').pop()?.toLowerCase();
+        const fileName = `withdrawal_${selectedWithdrawal.id}_${Date.now()}.${fileExt}`;
+        
+        // Tentar upload para o Supabase Storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('withdrawal-proofs')
-          .upload(fileName, proofFile);
+          .upload(fileName, proofFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
         if (uploadError) {
           console.error('Erro no upload:', uploadError);
-          toast.error('Erro ao fazer upload do comprovante');
+          
+          // Se o bucket não existe, mostrar mensagem específica
+          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('does not exist')) {
+            toast.error('Storage não configurado. Use a opção de URL ou configure o bucket no Supabase.');
+            return;
+          }
+          
+          toast.error(`Erro no upload: ${uploadError.message}`);
           return;
         }
 
@@ -160,14 +183,22 @@ export default function WithdrawalsManagement() {
           .getPublicUrl(fileName);
 
         finalProofUrl = urlData.publicUrl;
+        toast.success('Arquivo enviado com sucesso!');
         
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro no upload:', error);
-        toast.error('Erro ao fazer upload do comprovante');
+        toast.error(`Erro inesperado no upload: ${error.message || 'Tente novamente'}`);
         return;
       } finally {
         setUploading(false);
       }
+    }
+
+    // Verificar se há pelo menos uma opção (arquivo ou URL)
+    if (!finalProofUrl && !proofFile) {
+      // Permitir aprovação sem comprovante
+      const confirm = window.confirm('Aprovar saque sem comprovante? Você pode enviar o comprovante posteriormente.');
+      if (!confirm) return;
     }
 
     // Aprovar com comprovante
@@ -598,24 +629,43 @@ export default function WithdrawalsManagement() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Upload className="w-4 h-4 inline mr-1" />
-                    Upload do Comprovante
+                    Upload do Comprovante (JPG, PNG, GIF, PDF - máx 10MB)
                   </label>
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept="image/jpeg,image/jpg,image/png,image/gif,application/pdf"
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
-                        setProofFile(e.target.files[0]);
+                        const file = e.target.files[0];
+                        
+                        // Validação client-side
+                        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
+                        if (!allowedTypes.includes(file.type)) {
+                          toast.error('Tipo de arquivo não suportado. Use JPG, PNG, GIF ou PDF.');
+                          e.target.value = '';
+                          return;
+                        }
+
+                        if (file.size > 10 * 1024 * 1024) {
+                          toast.error('Arquivo muito grande. Máximo 10MB.');
+                          e.target.value = '';
+                          return;
+                        }
+
+                        setProofFile(file);
                         setProofUrl(''); // Limpar URL se arquivo foi selecionado
                       }
                     }}
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                   {proofFile && (
-                    <p className="text-xs text-green-600 mt-1">
-                      <FileText className="w-3 h-3 inline mr-1" />
-                      {proofFile.name}
-                    </p>
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-xs text-green-700 flex items-center">
+                        <FileText className="w-3 h-3 mr-1" />
+                        <span className="font-medium">{proofFile.name}</span>
+                        <span className="ml-2 text-green-600">({(proofFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      </p>
+                    </div>
                   )}
                 </div>
 
