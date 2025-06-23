@@ -79,11 +79,30 @@ function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [recentSales, setRecentSales] = useState<any[]>([]);
-  const { estatisticas: mikrotikStats, loading: mikrotikLoading } = useMikrotikStatus();
+  const { mikrotiks: mikrotiksStatus, estatisticas: mikrotikStats, loading: mikrotikLoading } = useMikrotikStatus();
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Função para obter estatísticas de versões RouterOS
+  const getVersionStats = () => {
+    if (!mikrotiksStatus || mikrotiksStatus.length === 0) return [];
+    
+    const versions = mikrotiksStatus
+      .filter(m => m.heartbeat_version)
+      .map(m => m.heartbeat_version)
+      .filter(Boolean);
+    
+    const versionCounts = versions.reduce((acc, version) => {
+      acc[version!] = (acc[version!] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(versionCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3); // Top 3 versões mais usadas
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -575,12 +594,23 @@ function Dashboard() {
       {/* Status do sistema */}
       <div className="bg-white rounded-xl shadow-sm border p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Status do Sistema</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
             <div className="w-3 h-3 bg-green-500 rounded-full"></div>
             <div>
-              <p className="font-medium text-gray-700">MikroTiks</p>
-              <p className="text-sm text-gray-500">{stats.mikrotiksAtivos} ativos</p>
+              <p className="font-medium text-gray-700">MikroTiks Online</p>
+              <p className="text-sm text-gray-500">
+                {mikrotikStats?.online || 0} de {mikrotikStats?.total || 0}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <div>
+              <p className="font-medium text-gray-700">Com Heartbeat</p>
+              <p className="text-sm text-gray-500">
+                {mikrotiksStatus?.filter(m => m.heartbeat_version).length || 0} equipamentos
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
@@ -599,6 +629,38 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Versões RouterOS */}
+      {mikrotiksStatus && mikrotiksStatus.filter(m => m.heartbeat_version).length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-blue-600" />
+            Versões RouterOS em Uso
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {getVersionStats().map(([version, count], index) => (
+              <div key={version} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${
+                    index === 0 ? 'bg-blue-500' : 
+                    index === 1 ? 'bg-green-500' : 
+                    'bg-purple-500'
+                  }`} />
+                  <span className="font-mono text-sm">{version}</span>
+                </div>
+                <span className="text-sm font-medium text-gray-600">
+                  {count} equipamento{count > 1 ? 's' : ''}
+                </span>
+              </div>
+            ))}
+            {getVersionStats().length === 0 && (
+              <div className="col-span-full text-center text-gray-500 py-4">
+                Nenhuma versão de RouterOS detectada
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

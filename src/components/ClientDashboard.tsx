@@ -552,6 +552,9 @@ function ClientMikrotiks() {
   const [editingMikrotik, setEditingMikrotik] = useState<any>(null);
   const [editingPlano, setEditingPlano] = useState<any>(null);
   const [showPlanoModal, setShowPlanoModal] = useState(false);
+  
+  // Hook para status dos MikroTiks
+  const { mikrotiks: mikrotiksStatus } = useMikrotikStatus();
 
   useEffect(() => {
     loadData();
@@ -832,7 +835,49 @@ function ClientMikrotiks() {
                         <div className="flex items-center space-x-3 mt-1">
                           <div className={`w-2 h-2 rounded-full ${mikrotik.status === 'Ativo' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                           <span className="text-sm font-medium text-gray-600">{mikrotik.status}</span>
+                          
+                          {/* Status de conexão */}
+                          {(() => {
+                            const statusData = mikrotiksStatus.find(s => s.id === mikrotik.id);
+                            if (statusData) {
+                              return (
+                                <MikrotikStatusBadge
+                                  isOnline={statusData.is_online}
+                                  minutosOffline={statusData.minutos_offline}
+                                  ultimoHeartbeat={statusData.ultimo_heartbeat}
+                                  version={statusData.heartbeat_version}
+                                  uptime={statusData.heartbeat_uptime}
+                                  size="sm"
+                                />
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
+                        
+                        {/* Informações de versão e uptime */}
+                        {(() => {
+                          const statusData = mikrotiksStatus.find(s => s.id === mikrotik.id);
+                          if (statusData && (statusData.heartbeat_version || statusData.heartbeat_uptime)) {
+                            return (
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                {statusData.heartbeat_version && (
+                                  <div className="flex items-center gap-1">
+                                    <Activity className="w-3 h-3 text-blue-500" />
+                                    <span className="font-mono">{statusData.heartbeat_version}</span>
+                                  </div>
+                                )}
+                                {statusData.heartbeat_uptime && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-green-500" />
+                                    <span className="font-mono">{statusData.heartbeat_uptime}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                     

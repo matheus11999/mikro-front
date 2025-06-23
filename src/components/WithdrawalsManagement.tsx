@@ -18,8 +18,41 @@ import {
   RefreshCw,
   Upload,
   Image,
-  FileText
+  FileText,
+  Download,
+  ExternalLink,
+  Wallet
 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
 
@@ -201,10 +234,8 @@ export default function WithdrawalsManagement() {
       if (!confirm) return;
     }
 
-    // Aprovar com comprovante
     await processWithdrawal(selectedWithdrawal.id, 'approved', {
-      proof_of_payment_url: finalProofUrl || null,
-      approved_by: 'Admin' // Você pode pegar do user context se disponível
+      proof_of_payment_url: finalProofUrl || null
     });
   };
 
@@ -215,18 +246,61 @@ export default function WithdrawalsManagement() {
     }
 
     await processWithdrawal(selectedWithdrawal.id, 'rejected', {
-      rejection_reason: rejectionReason.trim(),
-      approved_by: 'Admin'
+      rejection_reason: rejectionReason.trim()
     });
   };
 
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending': return <Clock className="w-4 h-4" />;
+      case 'approved': return <CheckCircle className="w-4 h-4" />;
+      case 'rejected': return <XCircle className="w-4 h-4" />;
+      default: return <AlertCircle className="w-4 h-4" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
+      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending': return 'Pendente';
+      case 'approved': return 'Aprovado';
+      case 'rejected': return 'Rejeitado';
+      default: return 'Desconhecido';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR');
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(amount);
+  };
+
+  // Filtrar saques
   const filteredWithdrawals = withdrawals.filter(withdrawal => {
-    const matchesSearch = withdrawal.clientes?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         withdrawal.clientes?.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+      withdrawal.clientes?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      withdrawal.clientes?.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      withdrawal.id.toLowerCase().includes(searchTerm.toLowerCase());
+    
     const matchesStatus = filterStatus === 'all' || withdrawal.status === filterStatus;
+    
     return matchesSearch && matchesStatus;
   });
 
+  // Estatísticas
   const stats = {
     total: withdrawals.length,
     pending: withdrawals.filter(w => w.status === 'pending').length,
@@ -236,566 +310,405 @@ export default function WithdrawalsManagement() {
     pendingAmount: withdrawals.filter(w => w.status === 'pending').reduce((sum, w) => sum + w.amount, 0)
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-600" />;
-      case 'approved':
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case 'rejected':
-        return <XCircle className="w-4 h-4 text-red-600" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-600" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'approved':
-        return 'bg-green-100 text-green-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'Pendente';
-      case 'approved':
-        return 'Aprovado';
-      case 'rejected':
-        return 'Rejeitado';
-      default:
-        return 'Desconhecido';
-    }
-  };
-
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-gray-100 rounded"></div>
-            ))}
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="space-y-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-16 bg-gray-100 rounded"></div>
-              ))}
-            </div>
-          </div>
+      <div className="p-6 space-y-8 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+          <span className="ml-3 text-lg text-gray-600">Carregando saques...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gerenciar Saques</h1>
-          <p className="text-gray-600 mt-1">
-            {filteredWithdrawals.length} saque{filteredWithdrawals.length !== 1 ? 's' : ''} encontrado{filteredWithdrawals.length !== 1 ? 's' : ''}
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gerenciar Saques</h1>
+          <p className="text-gray-600 mt-2">
+            Analise e processe solicitações de saque dos clientes
           </p>
         </div>
-        <button
+        <Button 
           onClick={loadWithdrawals}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          variant="outline"
+          className="w-fit"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4 mr-2" />
           Atualizar
-        </button>
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total de Saques</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Banknote className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-xs text-gray-500">
-              Total: R$ {stats.totalAmount.toFixed(2)}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Saques</CardTitle>
+            <Banknote className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">
+              {formatCurrency(stats.totalAmount)} solicitados
             </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pendentes</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-            </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Clock className="w-6 h-6 text-yellow-600" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-xs text-gray-500">
-              Valor: R$ {stats.pendingAmount.toFixed(2)}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+            <p className="text-xs text-muted-foreground">
+              {formatCurrency(stats.pendingAmount)} aguardando
             </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Aprovados</p>
-              <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="text-xs text-green-600 font-medium">
-              {stats.total > 0 && `${Math.round((stats.approved / stats.total) * 100)}% aprovados`}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Aprovados</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
+            <p className="text-xs text-muted-foreground">
+              Saques processados
             </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Rejeitados</p>
-              <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
-            </div>
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <XCircle className="w-6 h-6 text-red-600" />
-            </div>
-          </div>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Rejeitados</CardTitle>
+            <XCircle className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats.rejected}</div>
+            <p className="text-xs text-muted-foreground">
+              Solicitações negadas
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar por nome ou email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Buscar por cliente, email ou ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Filtrar por status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="pending">Pendentes</SelectItem>
+                <SelectItem value="approved">Aprovados</SelectItem>
+                <SelectItem value="rejected">Rejeitados</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-            >
-              <option value="all">Todos os status</option>
-              <option value="pending">Pendentes</option>
-              <option value="approved">Aprovados</option>
-              <option value="rejected">Rejeitados</option>
-            </select>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Withdrawals Table */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cliente
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Valor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Solicitado em
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Comprovante
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredWithdrawals.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <Banknote className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500">Nenhum saque encontrado</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredWithdrawals.map((withdrawal) => (
-                  <tr key={withdrawal.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {withdrawal.clientes?.nome || 'N/A'}
+      <Card>
+        <CardHeader>
+          <CardTitle>Solicitações de Saque</CardTitle>
+          <CardDescription>
+            {filteredWithdrawals.length} de {withdrawals.length} solicitações
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {filteredWithdrawals.length === 0 ? (
+            <div className="text-center py-12">
+              <Wallet className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum saque encontrado</h3>
+              <p className="text-gray-600">
+                {searchTerm || filterStatus !== 'all' 
+                  ? 'Tente ajustar os filtros de busca' 
+                  : 'Ainda não há solicitações de saque'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Data Solicitação</TableHead>
+                    <TableHead>Chave PIX</TableHead>
+                    <TableHead>Comprovante</TableHead>
+                    <TableHead>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredWithdrawals.map((withdrawal) => (
+                    <TableRow key={withdrawal.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-blue-600" />
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {withdrawal.clientes?.email || 'N/A'}
-                          </div>
-                          {withdrawal.clientes?.chave_pix && (
-                            <div className="text-xs text-gray-400 flex items-center gap-1 mt-1">
-                              <CreditCard className="w-3 h-3" />
-                              PIX: {withdrawal.clientes.chave_pix.substring(0, 15)}...
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {withdrawal.clientes?.nome || 'Nome não disponível'}
                             </div>
-                          )}
+                            <div className="text-sm text-gray-500">
+                              {withdrawal.clientes?.email || 'Email não disponível'}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-green-600" />
-                        <span className="text-lg font-bold text-green-600">
-                          R$ {withdrawal.amount.toFixed(2)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(withdrawal.status)}`}>
-                        {getStatusIcon(withdrawal.status)}
-                        {getStatusText(withdrawal.status)}
-                      </span>
-                      {withdrawal.processeddate && (
-                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          Processado: {new Date(withdrawal.processeddate).toLocaleDateString('pt-BR')}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(withdrawal.requestdate).toLocaleDateString('pt-BR')}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(withdrawal.requestdate).toLocaleTimeString('pt-BR')}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {withdrawal.proof_of_payment_url ? (
-                        <a 
-                          href={withdrawal.proof_of_payment_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Ver Comprovante
-                        </a>
-                      ) : withdrawal.status === 'approved' ? (
-                        <span className="text-yellow-600 text-xs font-medium">
-                          <AlertCircle className="w-3 h-3 inline mr-1" />
-                          Sem comprovante
-                        </span>
-                      ) : withdrawal.status === 'rejected' && withdrawal.rejection_reason ? (
-                        <div className="max-w-32">
-                          <span className="text-red-600 text-xs block truncate" title={withdrawal.rejection_reason}>
-                            Motivo: {withdrawal.rejection_reason}
+                      </TableCell>
+                      
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-green-600" />
+                          <span className="font-semibold text-green-600">
+                            {formatCurrency(withdrawal.amount)}
                           </span>
                         </div>
-                      ) : (
-                        <span className="text-gray-400 text-xs">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {withdrawal.status === 'pending' ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleApprove(withdrawal)}
-                            disabled={processing === withdrawal.id}
-                            className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-                          >
-                            <Check className="w-3 h-3" />
-                            {processing === withdrawal.id ? 'Processando...' : 'Aprovar'}
-                          </button>
-                          <button
-                            onClick={() => handleReject(withdrawal)}
-                            disabled={processing === withdrawal.id}
-                            className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-                          >
-                            <X className="w-3 h-3" />
-                            {processing === withdrawal.id ? 'Processando...' : 'Rejeitar'}
-                          </button>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <Badge className={`${getStatusColor(withdrawal.status)} border`}>
+                          {getStatusIcon(withdrawal.status)}
+                          <span className="ml-1">{getStatusText(withdrawal.status)}</span>
+                        </Badge>
+                      </TableCell>
+                      
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm">
+                            {formatDate(withdrawal.requestdate)}
+                          </span>
                         </div>
-                      ) : withdrawal.status === 'approved' ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-green-600 text-xs font-medium">✓ Aprovado</span>
-                          {!withdrawal.proof_of_payment_url && (
-                            <button
-                              onClick={() => {
-                                setSelectedWithdrawal(withdrawal);
-                                setShowProofModal(true);
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-800 underline transition-colors"
+                      </TableCell>
+                      
+                      <TableCell>
+                        <div className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                          {withdrawal.clientes?.chave_pix || 'Não informado'}
+                        </div>
+                      </TableCell>
+                      
+                      <TableCell>
+                        {withdrawal.proof_of_payment_url ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(withdrawal.proof_of_payment_url, '_blank')}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            Ver
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-gray-400">Sem comprovante</span>
+                        )}
+                      </TableCell>
+                      
+                      <TableCell>
+                        {withdrawal.status === 'pending' ? (
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApprove(withdrawal)}
+                              disabled={processing === withdrawal.id}
+                              className="bg-green-600 hover:bg-green-700"
                             >
-                              Enviar Comprovante
-                            </button>
-                          )}
-                        </div>
-                      ) : withdrawal.status === 'rejected' ? (
-                        <span className="text-red-600 text-xs font-medium">✗ Rejeitado</span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Quick Actions for Pending Withdrawals */}
-      {stats.pending > 0 && (
-        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Saques Pendentes</h3>
-                <p className="text-sm text-gray-600">
-                  Você tem {stats.pending} saque{stats.pending !== 1 ? 's' : ''} pendente{stats.pending !== 1 ? 's' : ''} 
-                  no valor total de R$ {stats.pendingAmount.toFixed(2)}
-                </p>
-              </div>
+                              {processing === withdrawal.id ? (
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Check className="w-3 h-3" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleReject(withdrawal)}
+                              disabled={processing === withdrawal.id}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500">
+                            {withdrawal.processeddate && (
+                              <div>Processado em {formatDate(withdrawal.processeddate)}</div>
+                            )}
+                            {withdrawal.rejection_reason && (
+                              <div className="text-red-600 mt-1">
+                                Motivo: {withdrawal.rejection_reason}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Processar em lote:</span>
-              <button
-                onClick={() => {
-                  const pendingIds = withdrawals
-                    .filter(w => w.status === 'pending')
-                    .map(w => w.id);
-                  
-                  if (confirm(`Aprovar todos os ${stats.pending} saques pendentes?`)) {
-                    pendingIds.forEach(id => processWithdrawal(id, 'approved'));
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal de Aprovação com Comprovante */}
+             <Dialog open={showProofModal} onOpenChange={(open) => setShowProofModal(open)}>
+         <DialogContent className="sm:max-w-md">
+           <DialogHeader>
+             <DialogTitle>Aprovar Saque</DialogTitle>
+             <DialogDescription>
+               Envie o comprovante de pagamento para aprovar o saque de{' '}
+               <strong>{formatCurrency(selectedWithdrawal?.amount || 0)}</strong> para{' '}
+               <strong>{selectedWithdrawal?.clientes?.nome}</strong>
+             </DialogDescription>
+           </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Upload de arquivo */}
+            <div>
+              <Label htmlFor="proof-file">Enviar arquivo (JPG, PNG, GIF, PDF - máx 10MB)</Label>
+              <Input
+                id="proof-file"
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setProofFile(file);
+                    setProofUrl(''); // Limpar URL se arquivo foi selecionado
                   }
                 }}
-                className="px-3 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors"
-              >
-                Aprovar Todos
-              </button>
+                className="mt-1"
+              />
+              {proofFile && (
+                <p className="text-sm text-green-600 mt-1">
+                  Arquivo selecionado: {proofFile.name}
+                </p>
+              )}
+            </div>
+            
+            <div className="text-center text-sm text-gray-500">ou</div>
+            
+            {/* URL do comprovante */}
+            <div>
+              <Label htmlFor="proof-url">URL do comprovante</Label>
+              <Input
+                id="proof-url"
+                type="url"
+                placeholder="https://exemplo.com/comprovante.jpg"
+                value={proofUrl}
+                onChange={(e) => {
+                  setProofUrl(e.target.value);
+                  if (e.target.value) {
+                    setProofFile(null); // Limpar arquivo se URL foi inserida
+                  }
+                }}
+                className="mt-1"
+              />
+            </div>
+            
+            {selectedWithdrawal?.clientes?.chave_pix && (
+              <Alert>
+                <CreditCard className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Chave PIX:</strong> {selectedWithdrawal.clientes.chave_pix}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+          
+                     <DialogFooter>
+             <Button variant="outline" onClick={() => setShowProofModal(false)}>
+               Cancelar
+             </Button>
+             <Button 
+               onClick={handleSubmitApproval}
+               disabled={uploading}
+               className="bg-green-600 hover:bg-green-700"
+             >
+               {uploading ? (
+                 <>
+                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                   Enviando...
+                 </>
+               ) : (
+                 <>
+                   <Check className="w-4 h-4 mr-2" />
+                   Aprovar Saque
+                 </>
+               )}
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
+
+       {/* Modal de Rejeição */}
+       <Dialog open={showRejectModal} onOpenChange={(open) => setShowRejectModal(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rejeitar Saque</DialogTitle>
+            <DialogDescription>
+              Informe o motivo da rejeição do saque de{' '}
+              <strong>{formatCurrency(selectedWithdrawal?.amount || 0)}</strong> para{' '}
+              <strong>{selectedWithdrawal?.clientes?.nome}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rejection-reason">Motivo da rejeição *</Label>
+              <Textarea
+                id="rejection-reason"
+                placeholder="Descreva o motivo da rejeição..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="mt-1"
+                rows={3}
+              />
             </div>
           </div>
-        </div>
-      )}
-
-              {/* Modal de Aprovação com Comprovante */}
-        {showProofModal && selectedWithdrawal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Aprovar Saque</h2>
-                  <p className="text-sm text-gray-600">R$ {selectedWithdrawal.amount.toFixed(2)} para {selectedWithdrawal.clientes?.nome}</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Upload className="w-4 h-4 inline mr-1" />
-                    Upload do Comprovante (JPG, PNG, GIF, PDF - máx 10MB)
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/gif,application/pdf"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        const file = e.target.files[0];
-                        
-                        // Validação client-side
-                        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
-                        if (!allowedTypes.includes(file.type)) {
-                          toast.error('Tipo de arquivo não suportado. Use JPG, PNG, GIF ou PDF.');
-                          e.target.value = '';
-                          return;
-                        }
-
-                        if (file.size > 10 * 1024 * 1024) {
-                          toast.error('Arquivo muito grande. Máximo 10MB.');
-                          e.target.value = '';
-                          return;
-                        }
-
-                        setProofFile(file);
-                        setProofUrl(''); // Limpar URL se arquivo foi selecionado
-                      }
-                    }}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                  {proofFile && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-xs text-green-700 flex items-center">
-                        <FileText className="w-3 h-3 mr-1" />
-                        <span className="font-medium">{proofFile.name}</span>
-                        <span className="ml-2 text-green-600">({(proofFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="text-center">
-                  <span className="text-sm text-gray-500">ou</span>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Image className="w-4 h-4 inline mr-1" />
-                    URL do Comprovante
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://exemplo.com/comprovante.jpg"
-                    value={proofUrl}
-                    onChange={(e) => {
-                      setProofUrl(e.target.value);
-                      if (e.target.value.trim()) {
-                        setProofFile(null); // Limpar arquivo se URL foi preenchida
-                      }
-                    }}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <div className="flex items-start">
-                    <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 mr-2" />
-                    <div className="text-xs text-yellow-800">
-                      <p className="font-medium">Opcional:</p>
-                      <p>Você pode aprovar sem comprovante. O comprovante pode ser enviado posteriormente.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProofModal(false);
-                    setSelectedWithdrawal(null);
-                    setProofFile(null);
-                    setProofUrl('');
-                  }}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  disabled={uploading || processing}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSubmitApproval}
-                  disabled={uploading || processing}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {uploading ? 'Enviando...' : processing ? 'Aprovando...' : 'Aprovar Saque'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal de Rejeição */}
-        {showRejectModal && selectedWithdrawal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
-                  <X className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Rejeitar Saque</h2>
-                  <p className="text-sm text-gray-600">R$ {selectedWithdrawal.amount.toFixed(2)} para {selectedWithdrawal.clientes?.nome}</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Motivo da Rejeição <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="Ex: Chave PIX inválida, dados incorretos, etc."
-                    rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                    maxLength={500}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {rejectionReason.length}/500 caracteres
-                  </p>
-                </div>
-
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-start">
-                    <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 mr-2" />
-                    <div className="text-xs text-red-800">
-                      <p className="font-medium">Atenção:</p>
-                      <p>O valor será devolvido ao saldo do cliente após a rejeição.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setSelectedWithdrawal(null);
-                    setRejectionReason('');
-                  }}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  disabled={processing}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSubmitRejection}
-                  disabled={!rejectionReason.trim() || processing}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {processing ? 'Rejeitando...' : 'Rejeitar Saque'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectModal(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleSubmitRejection}
+              disabled={!rejectionReason.trim() || processing === selectedWithdrawal?.id}
+            >
+              {processing === selectedWithdrawal?.id ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Rejeitando...
+                </>
+              ) : (
+                <>
+                  <X className="w-4 h-4 mr-2" />
+                  Rejeitar Saque
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

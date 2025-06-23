@@ -13,13 +13,13 @@ import {
   AlertCircle,
   Settings,
   DollarSign,
-  Percent,
-  TrendingUp,
   Key,
   Copy,
   Eye,
   EyeOff,
-  Download
+  Download,
+  Activity,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -648,6 +648,23 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     return cliente ? cliente.nome : 'Cliente não encontrado';
   };
 
+  // Função para obter estatísticas de versões
+  const getVersionStats = () => {
+    const versions = mikrotiksStatus
+      .filter(m => m.heartbeat_version)
+      .map(m => m.heartbeat_version)
+      .filter(Boolean);
+    
+    const versionCounts = versions.reduce((acc, version) => {
+      acc[version!] = (acc[version!] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(versionCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3); // Top 3 versões mais usadas
+  };
+
   const filteredMikrotiks = mikrotiks.filter((mikrotik) => {
     const matchesSearch = mikrotik.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (mikrotik.provider_name && mikrotik.provider_name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -666,7 +683,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -704,7 +721,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total MikroTiks</CardTitle>
@@ -714,38 +731,6 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
             <div className="text-2xl font-bold">{mikrotiks.length}</div>
             <p className="text-xs text-muted-foreground">
               Equipamentos cadastrados
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Lucro Médio</CardTitle>
-            <Percent className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
-              {mikrotiks.length > 0 
-                ? (mikrotiks.reduce((acc, m) => acc + m.profitpercentage, 0) / mikrotiks.length).toFixed(1)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Média de todos os equipamentos
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Equipamentos Ativos</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {mikrotiks.filter(m => m.status === 'Ativo').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              De {mikrotiks.length} total
             </p>
           </CardContent>
         </Card>
@@ -764,7 +749,61 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Com Heartbeat</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">
+              {mikrotiksStatus.filter(m => m.heartbeat_version).length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enviando dados de sistema
+            </p>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Versões RouterOS mais comuns */}
+      {mikrotiksStatus.filter(m => m.heartbeat_version).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-600" />
+              Versões RouterOS em Uso
+            </CardTitle>
+            <CardDescription>
+              Distribuição das versões de RouterOS nos equipamentos conectados
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {getVersionStats().map(([version, count], index) => (
+                <div key={version} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      index === 0 ? 'bg-blue-500' : 
+                      index === 1 ? 'bg-green-500' : 
+                      'bg-purple-500'
+                    }`} />
+                    <span className="font-mono text-sm">{version}</span>
+                  </div>
+                  <Badge variant="secondary">
+                    {count} equipamento{count > 1 ? 's' : ''}
+                  </Badge>
+                </div>
+              ))}
+              {getVersionStats().length === 0 && (
+                <div className="col-span-full text-center text-gray-500 py-4">
+                  Nenhuma versão de RouterOS detectada
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
@@ -808,6 +847,8 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                 <TableHead>MikroTik</TableHead>
                 {currentUser?.role === 'admin' && <TableHead>Proprietário</TableHead>}
                 <TableHead>Conexão</TableHead>
+                <TableHead>Versão</TableHead>
+                <TableHead>Uptime</TableHead>
                 <TableHead>Porcentagem</TableHead>
                 <TableHead>Status</TableHead>
                 {currentUser?.role === 'admin' && <TableHead>Token API</TableHead>}
@@ -866,6 +907,44 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                           uptime={statusData.heartbeat_uptime}
                           size="sm"
                         />
+                      );
+                    })()}
+                  </TableCell>
+                  
+                  <TableCell>
+                    {(() => {
+                      const statusData = mikrotiksStatus.find(s => s.id === mikrotik.id);
+                      if (!statusData) {
+                        return <span className="text-xs text-gray-400">-</span>;
+                      }
+                      return statusData.heartbeat_version ? (
+                        <div className="flex items-center gap-1">
+                          <Activity className="w-3 h-3 text-blue-500" />
+                          <span className="text-xs font-mono text-gray-700">
+                            {statusData.heartbeat_version}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">N/A</span>
+                      );
+                    })()}
+                  </TableCell>
+                  
+                  <TableCell>
+                    {(() => {
+                      const statusData = mikrotiksStatus.find(s => s.id === mikrotik.id);
+                      if (!statusData) {
+                        return <span className="text-xs text-gray-400">-</span>;
+                      }
+                      return statusData.heartbeat_uptime ? (
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-green-500" />
+                          <span className="text-xs font-mono text-gray-700">
+                            {statusData.heartbeat_uptime}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">N/A</span>
                       );
                     })()}
                   </TableCell>
