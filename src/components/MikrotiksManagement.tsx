@@ -280,6 +280,9 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
 # MikroTik ID: ${mikrotik.id}
 # Token: ${mikrotik.api_token}
 # ============================================================================
+# IMPORTANTE: Copie e cole cada comando separadamente no terminal do MikroTik
+# Aguarde a confirmação de cada comando antes de colar o próximo
+# ============================================================================
 
 # PASSO 1: Criar script verificador de pagamentos (40 segundos)
 /system script add name="pix-verificador" source=":local apiUrl \\"https://api.lucro.top/api/recent-sales\\"; :local mikrotikId \\"${mikrotik.id}\\"; :local apiToken \\"${mikrotik.api_token}\\"; :log info \\"PIX iniciado\\"; :local macs \\"\\"; :for tentativa from=1 to=5 do={ :log info \\"Tentativa \\$tentativa\\"; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\"}\\\"; /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData dst-path=\\"vendas.txt\\"; :delay 2s; :local vendas [/file get [find name=\\"vendas.txt\\"] contents]; /file remove [find name=\\"vendas.txt\\"]; :if ([:len \\$vendas] > 0) do={ :local pos [:find \\$vendas \\"-\\"]; :if (\\$pos >= 0) do={ :local mac [:pick \\$vendas 0 \\$pos]; :local minutos [:tonum [:pick \\$vendas (\\$pos + 1) [:len \\$vendas]]]; :log info \\"MAC: \\$mac, Min: \\$minutos\\"; :if ([:find \\$macs \\$mac] < 0) do={ :do { /ip hotspot ip-binding remove [find mac-address=\\$mac] } on-error={}; :local agora [/system clock get time]; :local h [:tonum [:pick \\$agora 0 2]]; :local m [:tonum [:pick \\$agora 3 5]]; :local novoMin ((\\$h * 60) + \\$m + \\$minutos); :local novaH (\\$novoMin / 60); :local novaM (\\$novoMin % 60); :if (\\$novaH >= 24) do={ :set novaH (\\$novaH - 24) }; :local hs [:tostr \\$novaH]; :local ms [:tostr \\$novaM]; :if ([:len \\$hs] = 1) do={ :set hs (\\"0\\" . \\$hs) }; :if ([:len \\$ms] = 1) do={ :set ms (\\"0\\" . \\$ms) }; :local dataExpire ([/system clock get date] . \\"-\\" . \\$hs . \\$ms); :local comentario (\\"PIX-EXPIRE-\\" . \\$dataExpire . \\"-\\" . \\$mac); /ip hotspot ip-binding add mac-address=\\$mac type=bypassed comment=\\$comentario; :log info \\"Binding criado: \\$mac\\"; :set macs (\\$macs . \\$mac . \\";\\") } } } }; :if ([:len \\$macs] > 0) do={ :global pixMacsNotificar \\$macs; :global pixAcaoNotificar \\"connect\\"; :log info \\"Executando notificador...\\"; /system script run notificador-pix } else={ :log info \\"Nenhum MAC processado\\" }; :log info \\"PIX concluido\\""
@@ -290,17 +293,32 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
 # PASSO 3: Criar script de heartbeat (5 minutos)
 /system script add name="pix-heartbeat" source=":local apiUrl \\"https://api.lucro.top/api/mikrotik/heartbeat\\"; :local mikrotikId \\"${mikrotik.id}\\"; :local apiToken \\"${mikrotik.api_token}\\"; :local version [/system resource get version]; :local uptime [/system resource get uptime]; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"version\\\\\\":\\\\\\"\\$version\\\\\\",\\\\\\"uptime\\\\\\":\\\\\\"\\$uptime\\\\\\"}\\\"; :log info \\"=== HEARTBEAT INICIADO ===\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData; :log info \\"Heartbeat enviado com sucesso\\" } on-error={ :log error \\"Erro ao enviar heartbeat: \\$!\\" }; :log info \\"=== HEARTBEAT CONCLUIDO ===\\""
 
-# PASSO 4: Criar schedulers
+# PASSO 4: Criar schedulers (copie um por vez)
 /system scheduler add name="pix-verificador-scheduler" start-time=startup interval=40s on-event="/system script run pix-verificador"
+
 /system scheduler add name="pix-limpeza-scheduler" start-time=startup interval=2m on-event="/system script run pix-limpeza"
+
 /system scheduler add name="pix-heartbeat-scheduler" start-time=startup interval=5m on-event="/system script run pix-heartbeat"
 
-# PASSO 5: Executar teste inicial
-:log info "=== INSTALACAO COMPLETA FINALIZADA ==="
-:log info "Scripts criados: pix-verificador, pix-limpeza, pix-heartbeat"
-:log info "Schedulers criados: verificador (40s), limpeza (2m), heartbeat (5m)"
-:log info "Executando teste de heartbeat..."
-/system script run pix-heartbeat`;
+# PASSO 5: Testar instalação (copie um por vez)
+/system script run pix-heartbeat
+
+/system script run pix-verificador
+
+# PASSO 6: Verificar instalação
+/system script print
+
+/system scheduler print
+
+/log print where topics~"script"
+
+# ============================================================================
+# INSTALAÇÃO CONCLUÍDA!
+# Os scripts foram instalados e configurados para executar automaticamente:
+# - pix-verificador: a cada 40 segundos
+# - pix-limpeza: a cada 2 minutos  
+# - pix-heartbeat: a cada 5 minutos
+# ============================================================================`;
 
     try {
       await navigator.clipboard.writeText(installationCode);
