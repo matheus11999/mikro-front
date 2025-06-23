@@ -18,9 +18,11 @@ import {
   DollarSign,
   Wifi,
   UserCheck,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
 import UsersManagement from './UsersManagement';
 import MikrotiksManagement from './MikrotiksManagement';
 import PasswordsManagement from './PasswordsManagement';
@@ -521,6 +523,7 @@ function SimplePage({ title }: { title: string }) {
 export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const { pendingCount } = usePendingWithdrawals();
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -528,7 +531,12 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     { name: 'MikroTiks', href: '/mikrotiks', icon: Router },
     { name: 'Senhas', href: '/passwords', icon: Key },
     { name: 'MACs', href: '/macs', icon: Monitor },
-    { name: 'Saques', href: '/withdrawals', icon: CreditCard },
+    { 
+      name: 'Saques', 
+      href: '/withdrawals', 
+      icon: CreditCard,
+      badge: pendingCount > 0 ? pendingCount : undefined
+    },
     { name: 'Relatórios', href: '/reports', icon: BarChart3 },
   ];
 
@@ -583,14 +591,24 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 key={item.name}
                 to={item.href}
                 onClick={() => setSidebarOpen(false)}
-                className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                   isActivePath(item.href)
                     ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700 shadow-sm'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                <item.icon className={`w-5 h-5 mr-3 ${isActivePath(item.href) ? 'text-blue-600' : ''}`} />
-                {item.name}
+                <div className="flex items-center">
+                  <item.icon className={`w-5 h-5 mr-3 ${isActivePath(item.href) ? 'text-blue-600' : ''}`} />
+                  {item.name}
+                </div>
+                {item.badge && (
+                  <div className="flex items-center">
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full animate-pulse">
+                      {item.badge}
+                    </span>
+                    <AlertCircle className="w-3 h-3 text-red-500 ml-1" />
+                  </div>
+                )}
               </Link>
             ))}
           </nav>

@@ -444,7 +444,7 @@ const ClientWithdrawals = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Solicitação</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Processamento</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprovante</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprovante/Status</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -501,13 +501,30 @@ const ClientWithdrawals = () => {
                       {withdrawal.proof_of_payment_url ? (
                         <button
                           onClick={() => openProofModal(withdrawal.proof_of_payment_url!)}
-                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
                         >
                           <Eye className="w-4 h-4" />
                           Ver Comprovante
                         </button>
+                      ) : withdrawal.status === 'approved' ? (
+                        <div className="flex items-center text-yellow-600">
+                          <AlertCircle className="w-4 h-4 mr-1" />
+                          <span className="text-sm">Aguardando comprovante</span>
+                        </div>
+                      ) : withdrawal.status === 'rejected' && withdrawal.rejection_reason ? (
+                        <div className="flex items-center text-red-600">
+                          <XCircle className="w-4 h-4 mr-1" />
+                          <span className="text-sm" title={withdrawal.rejection_reason}>
+                            Rejeitado
+                          </span>
+                        </div>
+                      ) : withdrawal.status === 'pending' ? (
+                        <div className="flex items-center text-gray-500">
+                          <Clock className="w-4 h-4 mr-1" />
+                          <span className="text-sm">Em análise</span>
+                        </div>
                       ) : (
-                        withdrawal.status === 'completed' ? 'Sem comprovante' : '-'
+                        <span className="text-gray-400">-</span>
                       )}
                     </td>
                   </tr>

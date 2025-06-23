@@ -15,9 +15,13 @@ import {
   XCircle,
   Eye,
   CreditCard,
-  RefreshCw
+  RefreshCw,
+  Upload,
+  Image,
+  FileText
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { toast } from 'sonner';
 
 interface Withdrawal {
   id: string;
@@ -26,6 +30,9 @@ interface Withdrawal {
   status: 'pending' | 'approved' | 'rejected';
   requestdate: string;
   processeddate?: string;
+  proof_of_payment_url?: string;
+  approved_by?: string;
+  rejection_reason?: string;
   clientes?: {
     nome: string;
     email: string;
@@ -39,6 +46,17 @@ export default function WithdrawalsManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [processing, setProcessing] = useState<string | null>(null);
+  
+  // Estados para modal de comprovante
+  const [showProofModal, setShowProofModal] = useState(false);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<Withdrawal | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofUrl, setProofUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  
+  // Estados para modal de rejeição
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
     loadWithdrawals();
@@ -59,31 +77,116 @@ export default function WithdrawalsManagement() {
       setWithdrawals(data || []);
     } catch (error) {
       console.error('Erro ao carregar saques:', error);
+      toast.error('Erro ao carregar saques');
     } finally {
       setLoading(false);
     }
   };
 
-  const processWithdrawal = async (id: string, status: 'approved' | 'rejected') => {
+  const processWithdrawal = async (id: string, status: 'approved' | 'rejected', additionalData?: any) => {
     try {
       setProcessing(id);
       
+      const updateData: any = {
+        status,
+        processeddate: new Date().toISOString(),
+        ...additionalData
+      };
+
       const { error } = await supabase
         .from('withdrawals')
-        .update({
-          status,
-          processeddate: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
+      
+      toast.success(`Saque ${status === 'approved' ? 'aprovado' : 'rejeitado'} com sucesso!`);
       await loadWithdrawals();
+      
+      // Fechar modais
+      setShowRejectModal(false);
+      setShowProofModal(false);
+      setSelectedWithdrawal(null);
+      setRejectionReason('');
+      setProofFile(null);
+      setProofUrl('');
+      
     } catch (error) {
       console.error('Erro ao processar saque:', error);
-      alert('Erro ao processar saque');
+      toast.error('Erro ao processar saque');
     } finally {
       setProcessing(null);
     }
+  };
+
+  const handleApprove = (withdrawal: Withdrawal) => {
+    setSelectedWithdrawal(withdrawal);
+    setShowProofModal(true);
+  };
+
+  const handleReject = (withdrawal: Withdrawal) => {
+    setSelectedWithdrawal(withdrawal);
+    setShowRejectModal(true);
+  };
+
+  const handleSubmitApproval = async () => {
+    if (!selectedWithdrawal) return;
+
+    let finalProofUrl = proofUrl;
+
+    // Se há arquivo para upload
+    if (proofFile) {
+      try {
+        setUploading(true);
+        
+        // Gerar nome único para o arquivo
+        const fileExt = proofFile.name.split('.').pop();
+        const fileName = `${selectedWithdrawal.id}_${Date.now()}.${fileExt}`;
+        
+        // Upload para o Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('withdrawal-proofs')
+          .upload(fileName, proofFile);
+
+        if (uploadError) {
+          console.error('Erro no upload:', uploadError);
+          toast.error('Erro ao fazer upload do comprovante');
+          return;
+        }
+
+        // Obter URL pública do arquivo
+        const { data: urlData } = supabase.storage
+          .from('withdrawal-proofs')
+          .getPublicUrl(fileName);
+
+        finalProofUrl = urlData.publicUrl;
+        
+      } catch (error) {
+        console.error('Erro no upload:', error);
+        toast.error('Erro ao fazer upload do comprovante');
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    // Aprovar com comprovante
+    await processWithdrawal(selectedWithdrawal.id, 'approved', {
+      proof_of_payment_url: finalProofUrl || null,
+      approved_by: 'Admin' // Você pode pegar do user context se disponível
+    });
+  };
+
+  const handleSubmitRejection = async () => {
+    if (!selectedWithdrawal || !rejectionReason.trim()) {
+      toast.error('Motivo da rejeição é obrigatório');
+      return;
+    }
+
+    await processWithdrawal(selectedWithdrawal.id, 'rejected', {
+      rejection_reason: rejectionReason.trim(),
+      approved_by: 'Admin'
+    });
   };
 
   const filteredWithdrawals = withdrawals.filter(withdrawal => {
@@ -296,6 +399,9 @@ export default function WithdrawalsManagement() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Solicitado em
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Comprovante
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
                 </th>
@@ -304,7 +410,7 @@ export default function WithdrawalsManagement() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredWithdrawals.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={6} className="px-6 py-12 text-center">
                     <Banknote className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">Nenhum saque encontrado</p>
                   </td>
@@ -362,32 +468,71 @@ export default function WithdrawalsManagement() {
                         {new Date(withdrawal.requestdate).toLocaleTimeString('pt-BR')}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {withdrawal.proof_of_payment_url ? (
+                        <a 
+                          href={withdrawal.proof_of_payment_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Ver Comprovante
+                        </a>
+                      ) : withdrawal.status === 'approved' ? (
+                        <span className="text-yellow-600 text-xs font-medium">
+                          <AlertCircle className="w-3 h-3 inline mr-1" />
+                          Sem comprovante
+                        </span>
+                      ) : withdrawal.status === 'rejected' && withdrawal.rejection_reason ? (
+                        <div className="max-w-32">
+                          <span className="text-red-600 text-xs block truncate" title={withdrawal.rejection_reason}>
+                            Motivo: {withdrawal.rejection_reason}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {withdrawal.status === 'pending' ? (
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => processWithdrawal(withdrawal.id, 'approved')}
+                            onClick={() => handleApprove(withdrawal)}
                             disabled={processing === withdrawal.id}
                             className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
                           >
                             <Check className="w-3 h-3" />
-                            Aprovar
+                            {processing === withdrawal.id ? 'Processando...' : 'Aprovar'}
                           </button>
                           <button
-                            onClick={() => processWithdrawal(withdrawal.id, 'rejected')}
+                            onClick={() => handleReject(withdrawal)}
                             disabled={processing === withdrawal.id}
                             className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
                           >
                             <X className="w-3 h-3" />
-                            Rejeitar
+                            {processing === withdrawal.id ? 'Processando...' : 'Rejeitar'}
                           </button>
                         </div>
+                      ) : withdrawal.status === 'approved' ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-green-600 text-xs font-medium">✓ Aprovado</span>
+                          {!withdrawal.proof_of_payment_url && (
+                            <button
+                              onClick={() => {
+                                setSelectedWithdrawal(withdrawal);
+                                setShowProofModal(true);
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800 underline transition-colors"
+                            >
+                              Enviar Comprovante
+                            </button>
+                          )}
+                        </div>
+                      ) : withdrawal.status === 'rejected' ? (
+                        <span className="text-red-600 text-xs font-medium">✗ Rejeitado</span>
                       ) : (
-                        <div className="flex items-center justify-end">
-                          <button className="p-2 text-gray-400 hover:bg-gray-50 rounded-md transition-colors">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <span className="text-gray-400 text-xs">-</span>
                       )}
                     </td>
                   </tr>
@@ -434,6 +579,173 @@ export default function WithdrawalsManagement() {
           </div>
         </div>
       )}
+
+              {/* Modal de Aprovação com Comprovante */}
+        {showProofModal && selectedWithdrawal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                  <Check className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Aprovar Saque</h2>
+                  <p className="text-sm text-gray-600">R$ {selectedWithdrawal.amount.toFixed(2)} para {selectedWithdrawal.clientes?.nome}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Upload className="w-4 h-4 inline mr-1" />
+                    Upload do Comprovante
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setProofFile(e.target.files[0]);
+                        setProofUrl(''); // Limpar URL se arquivo foi selecionado
+                      }
+                    }}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  {proofFile && (
+                    <p className="text-xs text-green-600 mt-1">
+                      <FileText className="w-3 h-3 inline mr-1" />
+                      {proofFile.name}
+                    </p>
+                  )}
+                </div>
+
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">ou</span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Image className="w-4 h-4 inline mr-1" />
+                    URL do Comprovante
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://exemplo.com/comprovante.jpg"
+                    value={proofUrl}
+                    onChange={(e) => {
+                      setProofUrl(e.target.value);
+                      if (e.target.value.trim()) {
+                        setProofFile(null); // Limpar arquivo se URL foi preenchida
+                      }
+                    }}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="flex items-start">
+                    <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 mr-2" />
+                    <div className="text-xs text-yellow-800">
+                      <p className="font-medium">Opcional:</p>
+                      <p>Você pode aprovar sem comprovante. O comprovante pode ser enviado posteriormente.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProofModal(false);
+                    setSelectedWithdrawal(null);
+                    setProofFile(null);
+                    setProofUrl('');
+                  }}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={uploading || processing}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmitApproval}
+                  disabled={uploading || processing}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? 'Enviando...' : processing ? 'Aprovando...' : 'Aprovar Saque'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Rejeição */}
+        {showRejectModal && selectedWithdrawal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                  <X className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Rejeitar Saque</h2>
+                  <p className="text-sm text-gray-600">R$ {selectedWithdrawal.amount.toFixed(2)} para {selectedWithdrawal.clientes?.nome}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Motivo da Rejeição <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Ex: Chave PIX inválida, dados incorretos, etc."
+                    rows={4}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {rejectionReason.length}/500 caracteres
+                  </p>
+                </div>
+
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-start">
+                    <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 mr-2" />
+                    <div className="text-xs text-red-800">
+                      <p className="font-medium">Atenção:</p>
+                      <p>O valor será devolvido ao saldo do cliente após a rejeição.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setSelectedWithdrawal(null);
+                    setRejectionReason('');
+                  }}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={processing}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmitRejection}
+                  disabled={!rejectionReason.trim() || processing}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {processing ? 'Rejeitando...' : 'Rejeitar Saque'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 } 
