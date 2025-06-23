@@ -357,6 +357,27 @@ const ReportsManagement = () => {
             Aguardando Pagamento
           </Badge>
         );
+      case 'processando':
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200 animate-pulse">
+            <Clock className="w-3 h-3 mr-1" />
+            Processando
+          </Badge>
+        );
+      case 'autorizado':
+        return (
+          <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200">
+            <CheckCircle2 className="w-3 h-3 mr-1" />
+            Autorizado
+          </Badge>
+        );
+      case 'rejeitado':
+        return (
+          <Badge className="bg-red-100 text-red-800 border-red-200">
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            Rejeitado
+          </Badge>
+        );
       case 'cancelado':
         return (
           <Badge className="bg-red-100 text-red-800 border-red-200">
@@ -364,19 +385,48 @@ const ReportsManagement = () => {
             Cancelado
           </Badge>
         );
+      case 'expirado':
+        return (
+          <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+            <Clock className="w-3 h-3 mr-1" />
+            Expirado
+          </Badge>
+        );
+      case 'reembolsado':
+        return (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            Reembolsado
+          </Badge>
+        );
+      case 'chargeback':
+        return (
+          <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            Chargeback
+          </Badge>
+        );
       default:
         return (
           <Badge variant="secondary">
-            {status}
+            <AlertCircle className="w-3 h-3 mr-1" />
+            {status || 'Desconhecido'}
           </Badge>
         );
     }
   };
 
-  // Separar vendas pendentes das aprovadas
-  const vendasPendentes = salesData.filter(venda => venda.status === 'pendente');
+  // Separar vendas por status
+  const vendasPendentes = salesData.filter(venda => 
+    ['pendente', 'processando', 'autorizado'].includes(venda.status)
+  );
   const vendasAprovadas = salesData.filter(venda => venda.status === 'aprovado');
-  const vendasCanceladas = salesData.filter(venda => venda.status === 'cancelado');
+  const vendasCanceladas = salesData.filter(venda => 
+    ['cancelado', 'rejeitado', 'expirado'].includes(venda.status)
+  );
+  const vendasProblematicas = salesData.filter(venda => 
+    ['reembolsado', 'chargeback'].includes(venda.status)
+  );
 
   if (loading && !salesData.length) {
     return (
@@ -709,6 +759,64 @@ const ReportsManagement = () => {
         </Card>
       )}
 
+      {/* Vendas Problemáticas */}
+      {vendasProblematicas.length > 0 && (
+        <Card className="border-purple-200 bg-purple-50 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-purple-800 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Vendas Problemáticas ({vendasProblematicas.length})
+            </CardTitle>
+            <CardDescription className="text-purple-700">
+              Vendas com reembolsos ou chargebacks que requerem atenção
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Mikrotik</TableHead>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vendasProblematicas.map((venda) => (
+                  <TableRow key={venda.id} className="bg-white/70">
+                    <TableCell className="font-medium">
+                      {formatDate(venda.data)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Router className="w-4 h-4 text-gray-400" />
+                        {venda.mikrotiks?.nome || 'Desconhecido'}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {venda.planos?.nome || 'Desconhecido'}
+                    </TableCell>
+                    <TableCell className="font-semibold text-purple-700">
+                      {formatCurrency(venda.preco || venda.valor || 0)}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(venda.status)}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-purple-600 font-medium">
+                        {venda.status === 'reembolsado' ? 'Saldo revertido automaticamente' : 'Investigar chargeback'}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sales Table */}
       <Card className="border-0 shadow-sm">
         <CardHeader>
@@ -727,32 +835,59 @@ const ReportsManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {salesData.slice(0, 10).map((venda) => (
-                <TableRow key={venda.id} className={venda.status === 'pendente' ? 'bg-yellow-50 border-l-4 border-l-yellow-400' : ''}>
-                  <TableCell className="font-medium">
-                    {formatDate(venda.data)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Router className="w-4 h-4 text-gray-400" />
-                      {venda.mikrotiks?.nome || 'Desconhecido'}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {venda.planos?.nome || 'Desconhecido'}
-                  </TableCell>
-                  <TableCell className={`font-semibold ${
-                    venda.status === 'pendente' ? 'text-yellow-700' : 
-                    venda.status === 'aprovado' ? 'text-green-600' : 
-                    'text-red-600'
-                  }`}>
-                    {formatCurrency(venda.preco || venda.valor || 0)}
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(venda.status)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {salesData.slice(0, 10).map((venda) => {
+                const getRowStyle = (status: string) => {
+                  if (['pendente', 'processando', 'autorizado'].includes(status)) {
+                    return 'bg-yellow-50 border-l-4 border-l-yellow-400';
+                  }
+                  if (status === 'aprovado') {
+                    return 'bg-green-50 border-l-4 border-l-green-400';
+                  }
+                  if (['reembolsado', 'chargeback'].includes(status)) {
+                    return 'bg-purple-50 border-l-4 border-l-purple-400';
+                  }
+                  if (['rejeitado', 'cancelado', 'expirado'].includes(status)) {
+                    return 'bg-red-50 border-l-4 border-l-red-400';
+                  }
+                  return '';
+                };
+
+                const getValueColor = (status: string) => {
+                  if (['pendente', 'processando', 'autorizado'].includes(status)) {
+                    return 'text-yellow-700';
+                  }
+                  if (status === 'aprovado') {
+                    return 'text-green-600';
+                  }
+                  if (['reembolsado', 'chargeback'].includes(status)) {
+                    return 'text-purple-600';
+                  }
+                  return 'text-red-600';
+                };
+
+                return (
+                  <TableRow key={venda.id} className={getRowStyle(venda.status)}>
+                    <TableCell className="font-medium">
+                      {formatDate(venda.data)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Router className="w-4 h-4 text-gray-400" />
+                        {venda.mikrotiks?.nome || 'Desconhecido'}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {venda.planos?.nome || 'Desconhecido'}
+                    </TableCell>
+                    <TableCell className={`font-semibold ${getValueColor(venda.status)}`}>
+                      {formatCurrency(venda.preco || venda.valor || 0)}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(venda.status)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           

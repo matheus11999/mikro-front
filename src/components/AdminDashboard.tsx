@@ -389,28 +389,86 @@ function Dashboard() {
           <div className="space-y-3">
             {recentSales.length > 0 ? (
               recentSales.map((sale, index) => {
-                const isPendente = (sale as any).status === 'pendente';
-                const isAprovado = (sale as any).status === 'aprovado';
+                const status = (sale as any).status;
+                const getStatusConfig = (status: string) => {
+                  switch (status) {
+                    case 'aprovado':
+                      return {
+                        bgClass: 'bg-green-50 border border-green-200',
+                        iconBg: 'bg-green-100',
+                        icon: <Wifi className="w-4 h-4 text-green-600" />,
+                        textColor: 'text-green-600',
+                        statusText: 'Aprovado'
+                      };
+                    case 'pendente':
+                      return {
+                        bgClass: 'bg-yellow-50 border border-yellow-200',
+                        iconBg: 'bg-yellow-100',
+                        icon: <Clock className="w-4 h-4 text-yellow-600 animate-pulse" />,
+                        textColor: 'text-yellow-600',
+                        statusText: 'Aguardando Pagamento'
+                      };
+                    case 'processando':
+                      return {
+                        bgClass: 'bg-blue-50 border border-blue-200',
+                        iconBg: 'bg-blue-100',
+                        icon: <Clock className="w-4 h-4 text-blue-600 animate-pulse" />,
+                        textColor: 'text-blue-600',
+                        statusText: 'Processando'
+                      };
+                    case 'autorizado':
+                      return {
+                        bgClass: 'bg-indigo-50 border border-indigo-200',
+                        iconBg: 'bg-indigo-100',
+                        icon: <Wifi className="w-4 h-4 text-indigo-600" />,
+                        textColor: 'text-indigo-600',
+                        statusText: 'Autorizado'
+                      };
+                    case 'rejeitado':
+                    case 'cancelado':
+                    case 'expirado':
+                      return {
+                        bgClass: 'bg-red-50 border border-red-200',
+                        iconBg: 'bg-red-100',
+                        icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
+                        textColor: 'text-red-600',
+                        statusText: status === 'rejeitado' ? 'Rejeitado' : 
+                                   status === 'cancelado' ? 'Cancelado' : 'Expirado'
+                      };
+                    case 'reembolsado':
+                      return {
+                        bgClass: 'bg-orange-50 border border-orange-200',
+                        iconBg: 'bg-orange-100',
+                        icon: <AlertTriangle className="w-4 h-4 text-orange-600" />,
+                        textColor: 'text-orange-600',
+                        statusText: 'Reembolsado'
+                      };
+                    case 'chargeback':
+                      return {
+                        bgClass: 'bg-purple-50 border border-purple-200',
+                        iconBg: 'bg-purple-100',
+                        icon: <AlertTriangle className="w-4 h-4 text-purple-600" />,
+                        textColor: 'text-purple-600',
+                        statusText: 'Chargeback'
+                      };
+                    default:
+                      return {
+                        bgClass: 'bg-gray-50 border border-gray-200',
+                        iconBg: 'bg-gray-100',
+                        icon: <AlertTriangle className="w-4 h-4 text-gray-600" />,
+                        textColor: 'text-gray-600',
+                        statusText: status || 'Desconhecido'
+                      };
+                  }
+                };
+
+                const statusConfig = getStatusConfig(status);
                 
                 return (
-                  <div key={index} className={`flex items-center justify-between p-3 rounded-lg ${
-                    isPendente ? 'bg-yellow-50 border border-yellow-200' :
-                    isAprovado ? 'bg-gray-50' :
-                    'bg-red-50 border border-red-200'
-                  }`}>
+                  <div key={index} className={`flex items-center justify-between p-3 rounded-lg ${statusConfig.bgClass}`}>
                     <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        isPendente ? 'bg-yellow-100' :
-                        isAprovado ? 'bg-blue-100' :
-                        'bg-red-100'
-                      }`}>
-                        {isPendente ? (
-                          <Clock className="w-4 h-4 text-yellow-600 animate-pulse" />
-                        ) : isAprovado ? (
-                          <Wifi className="w-4 h-4 text-blue-600" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4 text-red-600" />
-                        )}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${statusConfig.iconBg}`}>
+                        {statusConfig.icon}
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">
@@ -419,19 +477,13 @@ function Dashboard() {
                         <p className="text-sm text-gray-500">
                           {(sale as any).planos?.nome || 'Plano'} - {new Date(sale.data).toLocaleDateString('pt-BR')}
                         </p>
-                        {isPendente && (
-                          <p className="text-xs text-yellow-600 font-medium">
-                            Aguardando Pagamento
-                          </p>
-                        )}
+                        <p className={`text-xs font-medium ${statusConfig.textColor}`}>
+                          {statusConfig.statusText}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`font-semibold ${
-                        isPendente ? 'text-yellow-600' :
-                        isAprovado ? 'text-green-600' :
-                        'text-red-600'
-                      }`}>
+                      <p className={`font-semibold ${statusConfig.textColor}`}>
                         R$ {Number(sale.preco).toFixed(2)}
                       </p>
                     </div>
