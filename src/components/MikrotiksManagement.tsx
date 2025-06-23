@@ -294,6 +294,58 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
     }
   };
 
+  const handleCopyAllCommands = async (mikrotik: Mikrotik) => {
+    const allCommands = [
+      `# INSTALAÇÃO COMPLETA SISTEMA PIX - ${mikrotik.nome}`,
+      `# MikroTik ID: ${mikrotik.id}`,
+      `# Token: ${mikrotik.api_token}`,
+      `# Execute os comandos na ordem abaixo:`,
+      ``,
+      `# 1. Script Verificador (40s)`,
+      `/system script add name="pix-verificador" source=":local apiUrl \\"https://api.lucro.top/api/recent-sales\\"; :local mikrotikId \\"${mikrotik.id}\\"; :local apiToken \\"${mikrotik.api_token}\\"; :log info \\"PIX iniciado\\"; :local macs \\"\\"; :for tentativa from=1 to=5 do={ :log info \\"Tentativa \\$tentativa\\"; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\"}\\\"; /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData dst-path=\\"vendas.txt\\"; :delay 2s; :local vendas [/file get [find name=\\"vendas.txt\\"] contents]; /file remove [find name=\\"vendas.txt\\"]; :if ([:len \\$vendas] > 0) do={ :local pos [:find \\$vendas \\"-\\"]; :if (\\$pos >= 0) do={ :local mac [:pick \\$vendas 0 \\$pos]; :local minutos [:tonum [:pick \\$vendas (\\$pos + 1) [:len \\$vendas]]]; :log info \\"MAC: \\$mac, Min: \\$minutos\\"; :if ([:find \\$macs \\$mac] < 0) do={ :do { /ip hotspot ip-binding remove [find mac-address=\\$mac] } on-error={}; :local agora [/system clock get time]; :local h [:tonum [:pick \\$agora 0 2]]; :local m [:tonum [:pick \\$agora 3 5]]; :local novoMin ((\\$h * 60) + \\$m + \\$minutos); :local novaH (\\$novoMin / 60); :local novaM (\\$novoMin % 60); :if (\\$novaH >= 24) do={ :set novaH (\\$novaH - 24) }; :local hs [:tostr \\$novaH]; :local ms [:tostr \\$novaM]; :if ([:len \\$hs] = 1) do={ :set hs (\\"0\\" . \\$hs) }; :if ([:len \\$ms] = 1) do={ :set ms (\\"0\\" . \\$ms) }; :local dataExpire ([/system clock get date] . \\"-\\" . \\$hs . \\$ms); :local comentario (\\"PIX-EXPIRE-\\" . \\$dataExpire . \\"-\\" . \\$mac); /ip hotspot ip-binding add mac-address=\\$mac type=bypassed comment=\\$comentario; :log info \\"Binding criado: \\$mac\\"; :set macs (\\$macs . \\$mac . \\";\\") } } } }; :if ([:len \\$macs] > 0) do={ :global pixMacsNotificar \\$macs; :global pixAcaoNotificar \\"connect\\"; :log info \\"Executando notificador...\\"; /system script run notificador-pix } else={ :log info \\"Nenhum MAC processado\\" }; :log info \\"PIX concluido\\""`,
+      ``,
+      `# 2. Script Limpeza (2min)`,
+      `/system script add name="pix-limpeza" source=":log info \\"=== LIMPEZA AUTOMATICA INICIADA ===\\"; :local agora [/system clock get time]; :local hoje [/system clock get date]; :local h [:tonum [:pick \\$agora 0 [:find \\$agora \\":\\"]]]; :local m [:tonum [:pick \\$agora 3 5]]; :local minAtual ((\\$h * 60) + \\$m); :local pos1 [:find \\$hoje \\"-\\"]; :local anoAtual [:tonum [:pick \\$hoje 0 \\$pos1]]; :local resto1 [:pick \\$hoje (\\$pos1 + 1) [:len \\$hoje]]; :local pos2 [:find \\$resto1 \\"-\\"]; :local mesAtual [:tonum [:pick \\$resto1 0 \\$pos2]]; :local diaAtual [:tonum [:pick \\$resto1 (\\$pos2 + 1) [:len \\$resto1]]]; :log info \\"HOJE: \\$anoAtual-\\$mesAtual-\\$diaAtual \\$h:\\$m\\"; :local macsExpirados \\"\\"; :local removidos 0; :local total 0; :foreach binding in=[/ip hotspot ip-binding find where comment~\\"PIX-EXPIRE-\\"] do={ :set total (\\$total + 1); :local comentario [/ip hotspot ip-binding get \\$binding comment]; :local macAddress [/ip hotspot ip-binding get \\$binding mac-address]; :local pos [:find \\$comentario \\"PIX-EXPIRE-\\"]; :local dados [:pick \\$comentario (\\$pos + 11) [:len \\$comentario]]; :local p1 [:find \\$dados \\"-\\"]; :local ano [:tonum [:pick \\$dados 0 \\$p1]]; :local resto1 [:pick \\$dados (\\$p1 + 1) [:len \\$dados]]; :local p2 [:find \\$resto1 \\"-\\"]; :local mes [:tonum [:pick \\$resto1 0 \\$p2]]; :local resto2 [:pick \\$resto1 (\\$p2 + 1) [:len \\$resto1]]; :local p3 [:find \\$resto2 \\"-\\"]; :local dia [:tonum [:pick \\$resto2 0 \\$p3]]; :local resto3 [:pick \\$resto2 (\\$p3 + 1) [:len \\$resto2]]; :local p4 [:find \\$resto3 \\"-\\"]; :local horaStr [:pick \\$resto3 0 \\$p4]; :local horas [:tonum [:pick \\$horaStr 0 2]]; :local mins [:tonum [:pick \\$horaStr 2 4]]; :local minExpire ((\\$horas * 60) + \\$mins); :log info \\"EXPIRE: \\$ano-\\$mes-\\$dia \\$horas:\\$mins\\"; :local expirou false; :local dataAtualNum ((\\$anoAtual * 10000) + (\\$mesAtual * 100) + \\$diaAtual); :local dataExpireNum ((\\$ano * 10000) + (\\$mes * 100) + \\$dia); :log info \\"DataNum: atual=\\$dataAtualNum vs expire=\\$dataExpireNum\\"; :if (\\$dataExpireNum < \\$dataAtualNum) do={ :set expirou true; :log info \\"EXPIROU: Data passada (\\$dataExpireNum < \\$dataAtualNum)\\" }; :if (\\$dataExpireNum = \\$dataAtualNum and \\$minExpire <= \\$minAtual) do={ :set expirou true; :log info \\"EXPIROU: Mesmo dia, hora passada (\\$minExpire <= \\$minAtual)\\" }; :if (\\$expirou) do={ :log info \\"REMOVENDO: \\$macAddress\\"; /ip hotspot ip-binding remove \\$binding; :set macsExpirados (\\$macsExpirados . \\$macAddress . \\";\\"); :set removidos (\\$removidos + 1) } else={ :log info \\"MANTENDO: \\$macAddress\\" } }; :if ([:len \\$macsExpirados] > 0) do={ :global pixMacsDesconectar \\$macsExpirados; /system script run notificador-desconectado }; :log info \\"=== TOTAL:\\$total REMOVIDOS:\\$removidos ===\\""`,
+      ``,
+      `# 3. Script Heartbeat (5min) - CORRIGIDO`,
+      `/system script add name="pix-heartbeat" source=":local url \\"https://api.lucro.top/api/mikrotik/heartbeat\\"; :local id \\"${mikrotik.id}\\"; :local token \\"${mikrotik.api_token}\\"; :local version [/system resource get version]; :local uptime [/system resource get uptime]; :local json \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$id\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$token\\\\\\",\\\\\\"version\\\\\\":\\\\\\"\\$version\\\\\\",\\\\\\"uptime\\\\\\":\\\\\\"\\$uptime\\\\\\"}\\\"; :do { [/tool fetch url=\\$url http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$json] } on-error={}"`,
+      ``,
+      `# 4. Script Notificador PIX`,
+      `/system script add name="notificador-pix" source=":global pixMacsNotificar; :global pixAcaoNotificar; :log info \\"=== NOTIFICADOR PIX INICIADO ===\\"; :if ([:typeof \\$pixMacsNotificar] = \\"nothing\\") do={ :log error \\"Variável pixMacsNotificar não definida\\"; return }; :if ([:typeof \\$pixAcaoNotificar] = \\"nothing\\") do={ :log error \\"Variável pixAcaoNotificar não definida\\"; return }; :log info \\"MACs para notificar: \\$pixMacsNotificar\\"; :log info \\"Ação: \\$pixAcaoNotificar\\"; :local apiUrl \\"https://api.lucro.top/api/mikrotik/auth-notification\\"; :local mikrotikId \\"${mikrotik.id}\\"; :local apiToken \\"${mikrotik.api_token}\\"; :local pos 0; :while ([:find \\$pixMacsNotificar \\";\\\" \\$pos] >= 0) do={ :local fim [:find \\$pixMacsNotificar \\";\\\" \\$pos]; :local mac [:pick \\$pixMacsNotificar \\$pos \\$fim]; :if ([:len \\$mac] > 0) do={ :log info \\"Processando MAC: \\$mac\\"; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"mac_address\\\\\\":\\\\\\"\\$mac\\\\\\",\\\\\\"action\\\\\\":\\\\\\"\\$pixAcaoNotificar\\\\\\"}\\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData keep-result=no; :log info \\"Notificação enviada com sucesso para: \\$mac\\" } on-error={ :log error \\"Erro ao enviar notificação para: \\$mac - \\$!\\" } }; :set pos (\\$fim + 1) }; :set pixMacsNotificar; :set pixAcaoNotificar; :log info \\"=== NOTIFICADOR PIX FINALIZADO ===\\""`,
+      ``,
+      `# 5. Script Notificador Desconectado`,
+      `/system script add name="notificador-desconectado" source=":global pixMacsDesconectar; :log info \\"=== NOTIFICADOR DESCONEXAO INICIADO ===\\"; :if ([:typeof \\$pixMacsDesconectar] = \\"nothing\\") do={ :log error \\"Variável pixMacsDesconectar não definida\\"; return }; :log info \\"MACs para desconectar: \\$pixMacsDesconectar\\"; :local apiUrl \\"https://api.lucro.top/api/mikrotik/auth-notification\\"; :local mikrotikId \\"${mikrotik.id}\\"; :local apiToken \\"${mikrotik.api_token}\\"; :local pos 0; :while ([:find \\$pixMacsDesconectar \\";\\\" \\$pos] >= 0) do={ :local fim [:find \\$pixMacsDesconectar \\";\\\" \\$pos]; :local mac [:pick \\$pixMacsDesconectar \\$pos \\$fim]; :if ([:len \\$mac] > 0) do={ :log info \\"Processando desconexão: \\$mac\\"; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"mac_address\\\\\\":\\\\\\"\\$mac\\\\\\",\\\\\\"action\\\\\\":\\\\\\"disconnect\\\\\\"}\\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData keep-result=no; :log info \\"Disconnect enviado com sucesso para: \\$mac\\" } on-error={ :log error \\"Erro ao enviar disconnect para: \\$mac - \\$!\\" } }; :set pos (\\$fim + 1) }; :set pixMacsDesconectar; :log info \\"=== NOTIFICADOR DESCONEXAO FINALIZADO ===\\""`,
+      ``,
+      `# 6. Schedulers`,
+      `/system scheduler add name="pix-verificador-scheduler" start-time=startup interval=40s on-event="/system script run pix-verificador"`,
+      `/system scheduler add name="pix-limpeza-scheduler" start-time=startup interval=2m on-event="/system script run pix-limpeza"`,
+      `/system scheduler add name="pix-heartbeat-scheduler" start-time=startup interval=5m on-event="/system script run pix-heartbeat"`,
+      ``,
+      `# 7. Testes`,
+      `/system script run pix-heartbeat`,
+      `/system script run pix-verificador`,
+      ``,
+      `# 8. Verificação`,
+      `/system script print`,
+      `/system scheduler print`,
+      `/log print where topics~"script"`
+    ].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(allCommands);
+      toast({
+        title: "✅ Todos os Códigos Copiados!",
+        description: "Instalação completa copiada para a área de transferência",
+      });
+    } catch (err) {
+      toast({
+        title: "❌ Erro",
+        description: "Não foi possível copiar todos os comandos",
+        variant: "destructive",
+      });
+    }
+  };
+
   const fetchPlans = async () => {
     if (!selectedMikrotik) return;
     
@@ -1369,6 +1421,25 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
             </DialogDescription>
           </DialogHeader>
           
+          {/* Botão Copiar Todos os Códigos */}
+          {selectedInstallMikrotik && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-blue-900 mb-1">📋 Instalação Completa</h4>
+                  <p className="text-sm text-blue-700">Copie todos os comandos de uma vez e cole no bloco de notas para facilitar a instalação</p>
+                </div>
+                <Button
+                  onClick={() => handleCopyAllCommands(selectedInstallMikrotik)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copiar Todos os Códigos
+                </Button>
+              </div>
+            </div>
+          )}
+          
           {selectedInstallMikrotik && (
             <div className="space-y-6">
               {/* Informações do MikroTik */}
@@ -1425,11 +1496,11 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
               {/* Passo 3: Script Heartbeat */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-lg">3. Script de Heartbeat (5min)</h4>
+                  <h4 className="font-semibold text-lg">3. Script de Heartbeat (5min) - CORRIGIDO</h4>
                   <Button
                     size="sm"
                     onClick={() => handleCopyCommand(
-                      `/system script add name="pix-heartbeat" source=":local apiUrl \\"https://api.lucro.top/api/mikrotik/heartbeat\\"; :local mikrotikId \\"${selectedInstallMikrotik.id}\\"; :local apiToken \\"${selectedInstallMikrotik.api_token}\\"; :local version [/system resource get version]; :local uptime [/system resource get uptime]; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"version\\\\\\":\\\\\\"\\$version\\\\\\",\\\\\\"uptime\\\\\\":\\\\\\"\\$uptime\\\\\\"}\\\"; :log info \\"=== HEARTBEAT INICIADO ===\\"; :log info \\"URL: \\$apiUrl\\"; :log info \\"MikroTik ID: \\$mikrotikId\\"; :log info \\"Version: \\$version\\"; :log info \\"Uptime: \\$uptime\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData; :log info \\"Heartbeat enviado com sucesso\\" } on-error={ :log error \\"Erro ao enviar heartbeat: \\$!\\" }; :log info \\"=== HEARTBEAT CONCLUIDO ===\\""`,
+                      `/system script add name="pix-heartbeat" source=":local url \\"https://api.lucro.top/api/mikrotik/heartbeat\\"; :local id \\"${selectedInstallMikrotik.id}\\"; :local token \\"${selectedInstallMikrotik.api_token}\\"; :local version [/system resource get version]; :local uptime [/system resource get uptime]; :local json \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$id\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$token\\\\\\",\\\\\\"version\\\\\\":\\\\\\"\\$version\\\\\\",\\\\\\"uptime\\\\\\":\\\\\\"\\$uptime\\\\\\"}\\\"; :do { [/tool fetch url=\\$url http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$json] } on-error={}"`,
                       "Script Heartbeat"
                     )}
                   >
@@ -1438,7 +1509,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                   </Button>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg font-mono text-sm overflow-x-auto">
-                  /system script add name="pix-heartbeat" source=":local apiUrl \"https://api.lucro.top/api/mikrotik/heartbeat\"..."
+                  /system script add name="pix-heartbeat" source=":local url \"https://api.lucro.top/api/mikrotik/heartbeat\"..."
                 </div>
               </div>
 
