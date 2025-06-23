@@ -1429,7 +1429,7 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                   <Button
                     size="sm"
                     onClick={() => handleCopyCommand(
-                      `/system script add name="pix-heartbeat" source=":local apiUrl \\"https://api.lucro.top/api/mikrotik/heartbeat\\"; :local mikrotikId \\"${selectedInstallMikrotik.id}\\"; :local apiToken \\"${selectedInstallMikrotik.api_token}\\"; :local version [/system resource get version]; :local uptime [/system resource get uptime]; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"version\\\\\\":\\\\\\"\\$version\\\\\\",\\\\\\"uptime\\\\\\":\\\\\\"\\$uptime\\\\\\"}\\\"; :log info \\"=== HEARTBEAT INICIADO ===\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData; :log info \\"Heartbeat enviado com sucesso\\" } on-error={ :log error \\"Erro ao enviar heartbeat: \\$!\\" }; :log info \\"=== HEARTBEAT CONCLUIDO ===\\""`,
+                      `/system script add name="pix-heartbeat" source=":local apiUrl \\"https://api.lucro.top/api/mikrotik/heartbeat\\"; :local mikrotikId \\"${selectedInstallMikrotik.id}\\"; :local apiToken \\"${selectedInstallMikrotik.api_token}\\"; :local version [/system resource get version]; :local uptime [/system resource get uptime]; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"version\\\\\\":\\\\\\"\\$version\\\\\\",\\\\\\"uptime\\\\\\":\\\\\\"\\$uptime\\\\\\"}\\\"; :log info \\"=== HEARTBEAT INICIADO ===\\"; :log info \\"URL: \\$apiUrl\\"; :log info \\"MikroTik ID: \\$mikrotikId\\"; :log info \\"Version: \\$version\\"; :log info \\"Uptime: \\$uptime\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData; :log info \\"Heartbeat enviado com sucesso\\" } on-error={ :log error \\"Erro ao enviar heartbeat: \\$!\\" }; :log info \\"=== HEARTBEAT CONCLUIDO ===\\""`,
                       "Script Heartbeat"
                     )}
                   >
@@ -1442,9 +1442,49 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                 </div>
               </div>
 
-              {/* Passo 4: Schedulers */}
+              {/* Passo 4: Script Notificador PIX */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-lg">4. Criar Schedulers (copie um por vez)</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-lg">4. Script Notificador PIX</h4>
+                  <Button
+                    size="sm"
+                    onClick={() => handleCopyCommand(
+                      `/system script add name="notificador-pix" source=":global pixMacsNotificar; :global pixAcaoNotificar; :log info \\"=== NOTIFICADOR PIX INICIADO ===\\"; :if ([:typeof \\$pixMacsNotificar] = \\"nothing\\") do={ :log error \\"Variável pixMacsNotificar não definida\\"; return }; :if ([:typeof \\$pixAcaoNotificar] = \\"nothing\\") do={ :log error \\"Variável pixAcaoNotificar não definida\\"; return }; :log info \\"MACs para notificar: \\$pixMacsNotificar\\"; :log info \\"Ação: \\$pixAcaoNotificar\\"; :local apiUrl \\"https://api.lucro.top/api/mikrotik/auth-notification\\"; :local mikrotikId \\"${selectedInstallMikrotik.id}\\"; :local apiToken \\"${selectedInstallMikrotik.api_token}\\"; :local pos 0; :while ([:find \\$pixMacsNotificar \\";\\\" \\$pos] >= 0) do={ :local fim [:find \\$pixMacsNotificar \\";\\\" \\$pos]; :local mac [:pick \\$pixMacsNotificar \\$pos \\$fim]; :if ([:len \\$mac] > 0) do={ :log info \\"Processando MAC: \\$mac\\"; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"mac_address\\\\\\":\\\\\\"\\$mac\\\\\\",\\\\\\"action\\\\\\":\\\\\\"\\$pixAcaoNotificar\\\\\\"}\\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData keep-result=no; :log info \\"Notificação enviada com sucesso para: \\$mac\\" } on-error={ :log error \\"Erro ao enviar notificação para: \\$mac - \\$!\\" } }; :set pos (\\$fim + 1) }; :set pixMacsNotificar; :set pixAcaoNotificar; :log info \\"=== NOTIFICADOR PIX FINALIZADO ===\\""`,
+                      "Script Notificador PIX"
+                    )}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar
+                  </Button>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg font-mono text-sm overflow-x-auto">
+                  /system script add name="notificador-pix" source=":global pixMacsNotificar..."
+                </div>
+              </div>
+
+              {/* Passo 5: Script Notificador Desconectado */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-lg">5. Script Notificador Desconectado</h4>
+                  <Button
+                    size="sm"
+                    onClick={() => handleCopyCommand(
+                      `/system script add name="notificador-desconectado" source=":global pixMacsDesconectar; :log info \\"=== NOTIFICADOR DESCONEXAO INICIADO ===\\"; :if ([:typeof \\$pixMacsDesconectar] = \\"nothing\\") do={ :log error \\"Variável pixMacsDesconectar não definida\\"; return }; :log info \\"MACs para desconectar: \\$pixMacsDesconectar\\"; :local apiUrl \\"https://api.lucro.top/api/mikrotik/auth-notification\\"; :local mikrotikId \\"${selectedInstallMikrotik.id}\\"; :local apiToken \\"${selectedInstallMikrotik.api_token}\\"; :local pos 0; :while ([:find \\$pixMacsDesconectar \\";\\\" \\$pos] >= 0) do={ :local fim [:find \\$pixMacsDesconectar \\";\\\" \\$pos]; :local mac [:pick \\$pixMacsDesconectar \\$pos \\$fim]; :if ([:len \\$mac] > 0) do={ :log info \\"Processando desconexão: \\$mac\\"; :local jsonData \\"{\\\\\\"mikrotik_id\\\\\\":\\\\\\"\\$mikrotikId\\\\\\",\\\\\\"token\\\\\\":\\\\\\"\\$apiToken\\\\\\",\\\\\\"mac_address\\\\\\":\\\\\\"\\$mac\\\\\\",\\\\\\"action\\\\\\":\\\\\\"disconnect\\\\\\"}\\\"; :do { /tool fetch url=\\$apiUrl http-method=post http-header-field=\\"Content-Type:application/json\\" http-data=\\$jsonData keep-result=no; :log info \\"Disconnect enviado com sucesso para: \\$mac\\" } on-error={ :log error \\"Erro ao enviar disconnect para: \\$mac - \\$!\\" } }; :set pos (\\$fim + 1) }; :set pixMacsDesconectar; :log info \\"=== NOTIFICADOR DESCONEXAO FINALIZADO ===\\""`,
+                      "Script Notificador Desconectado"
+                    )}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar
+                  </Button>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg font-mono text-sm overflow-x-auto">
+                  /system script add name="notificador-desconectado" source=":global pixMacsDesconectar..."
+                </div>
+              </div>
+
+              {/* Passo 6: Schedulers */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-lg">6. Criar Schedulers (copie um por vez)</h4>
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1504,9 +1544,9 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                 </div>
               </div>
 
-              {/* Passo 5: Testes */}
+              {/* Passo 7: Testes */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-lg">5. Testar Instalação</h4>
+                <h4 className="font-semibold text-lg">7. Testar Instalação</h4>
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1547,9 +1587,9 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                 </div>
               </div>
 
-              {/* Passo 6: Verificação */}
+              {/* Passo 8: Verificação */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-lg">6. Verificar Instalação</h4>
+                <h4 className="font-semibold text-lg">8. Verificar Instalação</h4>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="space-y-2">
@@ -1618,7 +1658,8 @@ const MikrotiksManagement = ({ currentUser }: MikrotiksManagementProps) => {
                       <li>• Copie e cole cada comando separadamente no terminal do MikroTik</li>
                       <li>• Aguarde a confirmação de cada comando antes de colar o próximo</li>
                       <li>• Verifique os logs após a instalação para confirmar funcionamento</li>
-                      <li>• Os scripts executarão automaticamente: verificador (40s), limpeza (2min), heartbeat (5min)</li>
+                      <li>• Scripts criados: verificador, limpeza, heartbeat, notificador-pix, notificador-desconectado</li>
+                      <li>• Schedulers: verificador (40s), limpeza (2min), heartbeat (5min)</li>
                     </ul>
                   </div>
                 </div>
