@@ -23,7 +23,9 @@ import {
   Clock,
   AlertTriangle,
   ShoppingCart,
-  Settings
+  Settings,
+  Calendar,
+  Filter
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
@@ -37,6 +39,8 @@ import WithdrawalsManagement from './WithdrawalsManagement';
 import ReportsManagement from './ReportsManagement';
 import SiteSettings from './SiteSettings';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/utils';
 
 interface User {
@@ -86,28 +90,20 @@ interface TopUser {
   saldo: number;
 }
 
-interface DatabaseSale {
+interface RecentSale {
   id: string;
-  mac_address: string;
   valor: number;
-  created_at: string;
-  planos: {
-    nome: string;
-  }[];
-  mikrotiks: {
-    nome: string;
-  }[];
+  data: string;
+  descricao: string;
+  plano_nome: string;
+  mikrotik_nome: string;
+  cliente_nome?: string;
+  cliente_email?: string;
+  mac_address: string;
   status: string;
 }
 
-interface ProcessedSale {
-  id: string;
-  mac_address: string;
-  valor: number;
-  created_at: string;
-  plano_nome: string;
-  mikrotik_nome: string;
-}
+type PeriodFilter = 'today' | 'week' | 'month' | 'all';
 
 // Dashboard principal
 function Dashboard() {
@@ -129,554 +125,530 @@ function Dashboard() {
     macsTotal: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [recentSales, setRecentSales] = useState<ProcessedSale[]>([]);
+  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [topMikrotiks, setTopMikrotiks] = useState<TopMikrotik[]>([]);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
+  const [rankingPeriod, setRankingPeriod] = useState<PeriodFilter>('week');
   const { mikrotiks: mikrotiksStatus, estatisticas: mikrotikStats, loading: mikrotikLoading } = useMikrotikStatus();
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
-  // Função para obter estatísticas de versões RouterOS
-  const getVersionStats = () => {
-    if (!mikrotiksStatus || mikrotiksStatus.length === 0) return [];
-    
-    const versions = mikrotiksStatus
-      .filter(m => m.heartbeat_version)
-      .map(m => m.heartbeat_version)
-      .filter(Boolean);
-    
-    const versionCounts = versions.reduce((acc, version) => {
-      acc[version!] = (acc[version!] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+  useEffect(() => {
+    loadRankingData();
+  }, [rankingPeriod]);
 
-    return Object.entries(versionCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3); // Top 3 versões mais usadas
+  const getDateFilter = (period: PeriodFilter) => {
+    const now = new Date();
+    
+    switch (period) {
+      case 'today':
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return today.toISOString();
+      
+      case 'week':
+        const weekStart = new Date(now);
+        const dayOfWeek = now.getDay();
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        weekStart.setDate(now.getDate() - daysToMonday);
+        weekStart.setHours(0, 0, 0, 0);
+        return weekStart.toISOString();
+      
+      case 'month':
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        return monthStart.toISOString();
+      
+      default:
+        return null;
+    }
+  };
+
+  const getPeriodLabel = (period: PeriodFilter) => {
+    switch (period) {
+      case 'today': return 'Hoje';
+      case 'week': return 'Esta Semana';
+      case 'month': return 'Este Mês';
+      case 'all': return 'Todos os Tempos';
+    }
+  };
+
+  const loadRankingData = async () => {
+    try {
+      const dateFilter = getDateFilter(rankingPeriod);
+      
+      // Top MikroTiks por vendas no período
+      const mikrotikQuery = supabase
+        .from('vendas')
+        .select(`
+          mikrotik_id,
+          valor,
+          mikrotiks (
+            id,
+            nome
+          )
+        `)
+        .eq('status', 'aprovado');
+      
+      if (dateFilter) {
+        mikrotikQuery.gte('data', dateFilter);
+      }
+
+      const { data: mikrotikSales, error: mikrotikError } = await mikrotikQuery;
+      
+      if (mikrotikError) {
+        console.error('Erro ao buscar dados dos MikroTiks:', mikrotikError);
+      } else if (mikrotikSales) {
+        // Agrupar vendas por MikroTik
+        const mikrotikStats = mikrotikSales.reduce((acc, sale) => {
+          const mikrotikId = sale.mikrotik_id;
+          const mikrotikNome = sale.mikrotiks?.nome || 'MikroTik Desconhecido';
+          
+          if (!acc[mikrotikId]) {
+            acc[mikrotikId] = {
+              id: mikrotikId,
+              nome: mikrotikNome,
+              total_vendas: 0,
+              total_valor: 0
+            };
+          }
+          
+          acc[mikrotikId].total_vendas += 1;
+          acc[mikrotikId].total_valor += parseFloat(sale.valor || '0');
+          
+          return acc;
+        }, {} as Record<string, TopMikrotik>);
+
+        const topMikrotiksArray = Object.values(mikrotikStats)
+          .sort((a, b) => b.total_valor - a.total_valor)
+          .slice(0, 5);
+
+        setTopMikrotiks(topMikrotiksArray);
+      }
+
+      // Top Usuários por saldo
+      const { data: topUsersData, error: usersError } = await supabase
+        .from('clientes')
+        .select(`
+          id,
+          email,
+          nome,
+          saldo
+        `)
+        .order('saldo', { ascending: false })
+        .limit(5);
+
+      if (usersError) {
+        console.error('Erro ao buscar top usuários:', usersError);
+      } else {
+        const processedUsers = topUsersData?.map(user => ({
+          id: user.id,
+          email: user.email,
+          nome: user.nome,
+          total_vendas: 0, // Será calculado se necessário
+          saldo: parseFloat(user.saldo || '0')
+        })) || [];
+
+        setTopUsers(processedUsers);
+      }
+
+    } catch (error) {
+      console.error('Erro ao carregar rankings:', error);
+    }
   };
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
 
+      // Verificar qual chave está sendo usada
+      console.log('🔧 Verificando configuração Supabase:', {
+        anon_key: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Configurada' : 'Não configurada',
+        service_role: import.meta.env.VITE_SUPABASE_SERVICE_ROLE ? 'Configurada' : 'Não configurada',
+        key_fallback: import.meta.env.VITE_SUPABASE_KEY ? 'Configurada' : 'Não configurada'
+      });
+
       // Datas para cálculos
       const agora = new Date();
       const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
       
-      // Corrigir início da semana para segunda-feira
       const inicioSemana = new Date(agora);
-      const diaDaSemana = agora.getDay(); // 0 = domingo, 1 = segunda, etc.
-      const diasParaSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1; // Se domingo, volta 6 dias; senão volta (dia - 1)
+      const diaDaSemana = agora.getDay();
+      const diasParaSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1;
       inicioSemana.setDate(agora.getDate() - diasParaSegunda);
       inicioSemana.setHours(0, 0, 0, 0);
       
       const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
 
-      console.log('Datas de cálculo:', {
-        hoje: inicioHoje.toISOString(),
-        semana: inicioSemana.toISOString(),
-        mes: inicioMes.toISOString()
-      });
-
       // Carregar estatísticas gerais
       const [
         clientesRes,
         mikrotiksRes,
+        macsRes,
         vendasTodasRes,
         vendasHojeRes,
         vendasSemanaRes,
-        vendasMesRes,
-        recentSalesRes
+        vendasMesRes
       ] = await Promise.all([
         supabase.from('clientes').select('id'),
         supabase.from('mikrotiks').select('id').eq('status', 'Ativo'),
+        supabase.from('macs').select('id, status'),
         supabase.from('vendas').select('preco, lucro, status'),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
-        supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioMes.toISOString()),
-        supabase.from('vendas')
-          .select(`
-            id,
-            mac_address,
-            valor,
-            created_at,
-            planos(nome),
-            mikrotiks(nome),
-            status
-          `)
-          .eq('status', 'aprovado')
-          .order('created_at', { ascending: false })
-          .limit(10)
+        supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioMes.toISOString())
       ]);
 
-      // Buscar dados detalhados dos MACs apenas dos MikroTiks ativos
-      const mikrotiksAtivos = mikrotiksRes.data || [];
-      const mikrotiksIds = mikrotiksAtivos.map(m => m.id);
-      
-      let totalMacs = 0;
-      let macsConectados = 0;
-      
-      if (mikrotiksIds.length > 0) {
-        const macsRes = await supabase
-          .from('macs')
-          .select('id, status, mikrotik_id')
-          .in('mikrotik_id', mikrotiksIds);
-        
-        const macsData = macsRes.data || [];
-        totalMacs = macsData.length;
-        macsConectados = macsData.filter(mac => mac.status === 'conectado').length;
+      // Carregar vendas recentes
+      const { data: recentSalesData, error: salesError } = await supabase
+        .from('vendas')
+        .select(`
+          id,
+          valor,
+          data,
+          descricao,
+          status,
+          planos (
+            nome
+          ),
+          mikrotiks (
+            nome
+          ),
+          clientes (
+            nome,
+            email
+          ),
+          macs (
+            mac_address
+          )
+        `)
+        .eq('status', 'aprovado')
+        .order('data', { ascending: false })
+        .limit(10);
+
+      if (salesError) {
+        console.error('Erro ao buscar vendas recentes:', salesError);
+      } else {
+        const processedSales = recentSalesData?.map(sale => ({
+          id: sale.id,
+          valor: parseFloat(sale.valor || '0'),
+          data: sale.data,
+          descricao: sale.descricao || 'Venda',
+          plano_nome: sale.planos?.nome || 'Plano Desconhecido',
+          mikrotik_nome: sale.mikrotiks?.nome || 'MikroTik Desconhecido',
+          cliente_nome: sale.clientes?.nome,
+          cliente_email: sale.clientes?.email,
+          mac_address: sale.macs?.mac_address || 'N/A',
+          status: sale.status
+        })) || [];
+
+        setRecentSales(processedSales);
       }
 
-      // Calcular estatísticas por período
-      const vendasTodas = vendasTodasRes.data || [];
-      const vendasHoje = vendasHojeRes.data || [];
-      const vendasSemana = vendasSemanaRes.data || [];
-      const vendasMes = vendasMesRes.data || [];
+      // Calcular estatísticas
+      const totalClientes = clientesRes.data?.length || 0;
+      const mikrotiksAtivos = mikrotiksRes.data?.length || 0;
+      const totalMacs = macsRes.data?.length || 0;
+      const macsConectados = macsRes.data?.filter(mac => mac.status === 'conectado').length || 0;
 
-      console.log('Vendas encontradas:', {
-        todas: vendasTodas.length,
-        hoje: vendasHoje.length,
-        semana: vendasSemana.length,
-        mes: vendasMes.length
-      });
+      const vendasAprovadas = vendasTodasRes.data?.filter(v => v.status === 'aprovado') || [];
+      const totalVendas = vendasAprovadas.length;
 
-      // Calcular lucro (parte do admin) e receita por período
-      const lucroHoje = vendasHoje.reduce((sum, v) => sum + (Number(v.lucro) || 0), 0);
-      const lucroSemana = vendasSemana.reduce((sum, v) => sum + (Number(v.lucro) || 0), 0);
-      const lucroMes = vendasMes.reduce((sum, v) => sum + (Number(v.lucro) || 0), 0);
+      // Calcular receitas e lucros
+      const calcularValores = (vendas: any[]) => {
+        const receita = vendas.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
+        const lucro = vendas.reduce((sum, v) => sum + parseFloat(v.lucro || '0'), 0);
+        return { receita, lucro };
+      };
 
-      const receitaHoje = vendasHoje.reduce((sum, v) => sum + (Number(v.preco) || 0), 0);
-      const receitaSemana = vendasSemana.reduce((sum, v) => sum + (Number(v.preco) || 0), 0);
-      const receitaMes = vendasMes.reduce((sum, v) => sum + (Number(v.preco) || 0), 0);
+      const valoresHoje = calcularValores(vendasHojeRes.data || []);
+      const valoresSemana = calcularValores(vendasSemanaRes.data || []);
+      const valoresMes = calcularValores(vendasMesRes.data || []);
 
       setStats({
-        totalClientes: clientesRes.data?.length || 0,
-        totalVendas: vendasTodas.length,
-        mikrotiksAtivos: mikrotiksAtivos.length,
-        totalMacs: totalMacs,
-        macsConectados: macsConectados,
-        lucroHoje: lucroHoje,
-        lucroSemana: lucroSemana,
-        lucroMes: lucroMes,
-        receitaHoje: receitaHoje,
-        receitaSemana: receitaSemana,
-        receitaMes: receitaMes,
-        mikrotiksOnline: mikrotiksStatus?.filter(m => m.heartbeat_version).length || 0,
-        mikrotiksTotal: mikrotiksStatus?.length || 0,
+        totalClientes,
+        totalVendas,
+        mikrotiksAtivos,
+        totalMacs,
+        macsConectados,
+        lucroHoje: valoresHoje.lucro,
+        lucroSemana: valoresSemana.lucro,
+        lucroMes: valoresMes.lucro,
+        receitaHoje: valoresHoje.receita,
+        receitaSemana: valoresSemana.receita,
+        receitaMes: valoresMes.receita,
+        mikrotiksOnline: mikrotikStats?.online || 0,
+        mikrotiksTotal: mikrotikStats?.total || 0,
         macsOnline: macsConectados,
         macsTotal: totalMacs,
       });
 
-      // Carregar vendas recentes
-      const { data: recentSalesData } = await supabase
-        .from('vendas')
-        .select(`
-          id,
-          mac_address,
-          valor,
-          created_at,
-          planos(nome),
-          mikrotiks(nome),
-          status
-        `)
-        .eq('status', 'aprovado')
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      const recentSales = (recentSalesData as DatabaseSale[] || []).map(sale => ({
-        id: sale.id,
-        mac_address: sale.mac_address,
-        valor: sale.valor,
-        created_at: sale.created_at,
-        plano_nome: sale.planos?.[0]?.nome || 'Plano não encontrado',
-        mikrotik_nome: sale.mikrotiks?.[0]?.nome || 'MikroTik não encontrado'
-      }));
-
-      setRecentSales(recentSales);
-
-      // Carregar top MikroTiks com cálculos em tempo real
-      const { data: topMikrotiksData } = await supabase
-        .from('mikrotiks')
-        .select(`
-          id,
-          nome,
-          vendas(valor, status)
-        `)
-        .eq('status', 'Ativo')
-        .limit(20);
-
-      // Processar dados dos MikroTiks
-      const processedMikrotiks = (topMikrotiksData || []).map(mikrotik => {
-        const vendas = (mikrotik.vendas || []).filter(v => v.status === 'aprovado');
-        const totalVendas = vendas.length;
-        const totalValor = vendas.reduce((sum, venda) => sum + Number(venda.valor || 0), 0);
-        
-        return {
-          id: mikrotik.id,
-          nome: mikrotik.nome,
-          total_vendas: totalVendas,
-          total_valor: totalValor
-        };
-      }).filter(m => m.total_vendas > 0).sort((a, b) => b.total_valor - a.total_valor).slice(0, 5);
-
-      // Carregar top usuários (clientes) com cálculos em tempo real
-      const { data: topUsersData } = await supabase
-        .from('clientes')
-        .select(`
-          id,
-          email,
-          nome,
-          saldo,
-          vendas(id, status)
-        `)
-        .order('saldo', { ascending: false })
-        .limit(20);
-
-      // Processar dados dos usuários
-      const processedUsers = (topUsersData || []).map(user => {
-        const vendas = (user.vendas || []).filter(v => v.status === 'aprovado');
-        const totalVendas = vendas.length;
-        
-        return {
-          id: user.id,
-          email: user.email,
-          nome: user.nome,
-          total_vendas: totalVendas,
-          saldo: Number(user.saldo || 0)
-        };
-      }).filter(u => u.saldo > 0).sort((a, b) => b.saldo - a.saldo).slice(0, 6);
-
-      setTopMikrotiks(processedMikrotiks);
-      setTopUsers(processedUsers);
-
     } catch (error) {
-      console.error('Erro ao carregar dashboard:', error);
+      console.error('Erro ao carregar dados do dashboard:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-48"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-gray-200 rounded-lg h-32"></div>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {[...Array(2)].map((_, i) => (
-              <div key={i} className="bg-gray-200 rounded-lg h-64"></div>
-            ))}
-          </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center space-x-2">
+          <RefreshCw className="h-6 w-6 animate-spin" />
+          <span>Carregando dashboard...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <button
-          onClick={loadDashboardData}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Atualizar
-        </button>
-      </div>
-
-      {/* Cards de estatísticas - Primeira linha */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Meu Lucro Hoje</p>
-              <p className="text-2xl font-bold text-green-600">
-                R$ {stats.lucroHoje.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Comissão do dia
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">Visão geral do sistema</p>
         </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Meu Lucro da Semana</p>
-              <p className="text-2xl font-bold text-blue-600">
-                R$ {stats.lucroSemana.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Últimos 7 dias
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Meu Lucro do Mês</p>
-              <p className="text-2xl font-bold text-purple-600">
-                R$ {stats.lucroMes.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {new Date().toLocaleDateString('pt-BR', { month: 'long' })}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
+        <div className="flex items-center space-x-2">
+          <Button onClick={loadDashboardData} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
         </div>
       </div>
 
-      {/* Cards de estatísticas - Segunda linha */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Receita Total Hoje</p>
-              <p className="text-2xl font-bold text-emerald-600">
-                R$ {stats.receitaHoje.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Vendas de hoje
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-              <Activity className="w-6 h-6 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Receita Total da Semana</p>
-              <p className="text-2xl font-bold text-cyan-600">
-                R$ {stats.receitaSemana.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Últimos 7 dias
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-cyan-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Receita Total do Mês</p>
-              <p className="text-2xl font-bold text-indigo-600">
-                R$ {stats.receitaMes.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {new Date().toLocaleDateString('pt-BR', { month: 'long' })}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-indigo-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Card único para MACs conectados */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">MACs Conectados</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {stats.macsConectados}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                de {stats.totalMacs} total ({stats.totalMacs > 0 ? ((stats.macsConectados / stats.totalMacs) * 100).toFixed(1) : 0}%)
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Wifi className="w-6 h-6 text-orange-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total de Vendas</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.totalVendas}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Vendas aprovadas
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">MikroTiks Ativos</p>
-              <p className="text-2xl font-bold text-slate-600">{stats.mikrotiksAtivos}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Equipamentos online
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-              <Router className="w-6 h-6 text-slate-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Status dos MikroTiks */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* MikroTik Status Card */}
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader>
-            <CardTitle>Status dos MikroTiks</CardTitle>
-            <CardDescription>Visão geral dos equipamentos</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Clientes</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col space-y-2 p-4 bg-green-50 rounded-lg">
-                <span className="text-sm text-green-600 font-medium">Online</span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-bold text-green-700">{stats.mikrotiksOnline}</span>
-                  <span className="text-sm text-green-600">equipamentos</span>
-                </div>
-              </div>
-              <div className="flex flex-col space-y-2 p-4 bg-red-50 rounded-lg">
-                <span className="text-sm text-red-600 font-medium">Offline</span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-bold text-red-700">{stats.mikrotiksTotal - stats.mikrotiksOnline}</span>
-                  <span className="text-sm text-red-600">equipamentos</span>
-                </div>
-              </div>
-              <div className="flex flex-col space-y-2 p-4 bg-blue-50 rounded-lg">
-                <span className="text-sm text-blue-600 font-medium">MACs Ativos</span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-bold text-blue-700">{stats.macsOnline}</span>
-                  <span className="text-sm text-blue-600">dispositivos</span>
-                </div>
-              </div>
-              <div className="flex flex-col space-y-2 p-4 bg-purple-50 rounded-lg">
-                <span className="text-sm text-purple-600 font-medium">Total de MACs</span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-bold text-purple-700">{stats.macsTotal}</span>
-                  <span className="text-sm text-purple-600">registrados</span>
-                </div>
-              </div>
+            <div className="text-2xl font-bold">{stats.totalClientes}</div>
+            <p className="text-xs text-muted-foreground">Clientes registrados</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Vendas Aprovadas</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalVendas}</div>
+            <p className="text-xs text-muted-foreground">Total de vendas</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MikroTiks</CardTitle>
+            <Router className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.mikrotiksOnline}/{stats.mikrotiksTotal}
+            </div>
+            <p className="text-xs text-muted-foreground">Online/Total</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MACs</CardTitle>
+            <Wifi className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.macsOnline}/{stats.macsTotal}
+            </div>
+            <p className="text-xs text-muted-foreground">Conectados/Total</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Revenue Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Hoje</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.receitaHoje)}</div>
+            <p className="text-xs text-muted-foreground">
+              Lucro: {formatCurrency(stats.lucroHoje)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Esta Semana</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.receitaSemana)}</div>
+            <p className="text-xs text-muted-foreground">
+              Lucro: {formatCurrency(stats.lucroSemana)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Este Mês</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.receitaMes)}</div>
+            <p className="text-xs text-muted-foreground">
+              Lucro: {formatCurrency(stats.lucroMes)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rankings e Vendas Recentes */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* Top MikroTiks */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Top MikroTiks</CardTitle>
+              <Select value={rankingPeriod} onValueChange={(value: PeriodFilter) => setRankingPeriod(value)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Hoje</SelectItem>
+                  <SelectItem value="week">Semana</SelectItem>
+                  <SelectItem value="month">Mês</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <CardDescription>
+              Ranking por vendas - {getPeriodLabel(rankingPeriod)}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {topMikrotiks.length > 0 ? (
+                topMikrotiks.map((mikrotik, index) => (
+                  <div key={mikrotik.id} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium">{mikrotik.nome}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {mikrotik.total_vendas} vendas
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatCurrency(mikrotik.total_valor)}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhuma venda no período
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Top MikroTiks Card */}
+        {/* Top Usuários */}
         <Card>
           <CardHeader>
-            <CardTitle>Top MikroTiks</CardTitle>
-            <CardDescription>Ranking por vendas</CardDescription>
+            <CardTitle className="text-lg">Top Usuários</CardTitle>
+            <CardDescription>Ranking por saldo disponível</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {topMikrotiks.map((mikrotik, index) => (
-                <div key={mikrotik.id} className="flex items-center space-x-4">
-                  <div className="flex-none w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                    <span className="font-bold text-gray-700">#{index + 1}</span>
+            <div className="space-y-3">
+              {topUsers.length > 0 ? (
+                topUsers.map((user, index) => (
+                  <div key={user.id} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {user.nome || user.email.split('@')[0]}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {user.total_vendas} vendas • {user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatCurrency(user.saldo)}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{mikrotik.nome}</p>
-                    <p className="text-sm text-gray-500">{mikrotik.total_vendas} vendas</p>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum usuário encontrado
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Vendas Recentes */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Vendas Recentes</CardTitle>
+            <CardDescription>Últimas transações realizadas</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentSales.length > 0 ? (
+                recentSales.map((sale) => (
+                  <div key={sale.id} className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{sale.plano_nome}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {sale.mikrotik_nome} • {formatDate(sale.data)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        MAC: {sale.mac_address}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatCurrency(sale.valor)}</p>
+                      <p className="text-xs text-green-600">Aprovado</p>
+                    </div>
                   </div>
-                  <div className="flex-none">
-                    <span className="text-sm font-medium text-gray-900">{formatCurrency(mikrotik.total_valor)}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhuma venda recente
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Top Users Card */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Top Usuários</CardTitle>
-          <CardDescription>Ranking por saldo disponível</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {topUsers.map((user, index) => (
-              <div key={user.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-                <div className="flex-none w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <span className="font-bold text-blue-700">#{index + 1}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {user.nome || user.email}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {user.total_vendas} vendas • {user.email}
-                  </p>
-                </div>
-                <div className="flex-none">
-                  <span className="text-sm font-medium text-emerald-600">{formatCurrency(user.saldo)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Sales Section */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Vendas Recentes</CardTitle>
-          <CardDescription>Últimas transações realizadas</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentSales.map((sale) => (
-              <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <ShoppingCart className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{sale.mac_address}</p>
-                    <p className="text-sm text-gray-500">{sale.plano_nome}</p>
-                    <p className="text-xs text-gray-400">{new Date(sale.created_at).toLocaleString('pt-BR')}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">{formatCurrency(sale.valor)}</p>
-                  <p className="text-xs text-gray-500">{sale.mikrotik_nome}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* MikroTik Status */}
+      <MikrotikStatusSummary />
     </div>
   );
 }
