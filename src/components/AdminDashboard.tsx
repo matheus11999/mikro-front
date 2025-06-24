@@ -22,8 +22,7 @@ import {
   AlertCircle,
   Clock,
   AlertTriangle,
-  ShoppingCart,
-  Settings
+  ShoppingCart
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
@@ -35,7 +34,6 @@ import PasswordsManagement from './PasswordsManagement';
 import MacsManagement from './MacsManagement';
 import WithdrawalsManagement from './WithdrawalsManagement';
 import ReportsManagement from './ReportsManagement';
-import SiteSettings from './SiteSettings';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
 
@@ -81,7 +79,6 @@ interface TopMikrotik {
 interface TopUser {
   id: string;
   email: string;
-  nome: string;
   total_vendas: number;
   saldo: number;
 }
@@ -90,22 +87,14 @@ interface DatabaseSale {
   id: string;
   mac_address: string;
   valor: number;
-  data: string;
+  created_at: string;
   planos: {
     nome: string;
-  };
+  }[];
   mikrotiks: {
     nome: string;
-  };
+  }[];
   status: string;
-}
-
-interface VendaComMikrotik {
-  mikrotik_id: string;
-  preco: number;
-  mikrotiks: {
-    nome: string;
-  };
 }
 
 interface ProcessedSale {
@@ -146,6 +135,25 @@ function Dashboard() {
     loadDashboardData();
   }, []);
 
+  // Função para obter estatísticas de versões RouterOS
+  const getVersionStats = () => {
+    if (!mikrotiksStatus || mikrotiksStatus.length === 0) return [];
+    
+    const versions = mikrotiksStatus
+      .filter(m => m.heartbeat_version)
+      .map(m => m.heartbeat_version)
+      .filter(Boolean);
+    
+    const versionCounts = versions.reduce((acc, version) => {
+      acc[version!] = (acc[version!] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(versionCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3); // Top 3 versões mais usadas
+  };
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
@@ -176,14 +184,28 @@ function Dashboard() {
         vendasTodasRes,
         vendasHojeRes,
         vendasSemanaRes,
-        vendasMesRes
+        vendasMesRes,
+        recentSalesRes
       ] = await Promise.all([
         supabase.from('clientes').select('id'),
         supabase.from('mikrotiks').select('id').eq('status', 'Ativo'),
-        supabase.from('vendas').select('preco, lucro, status').eq('status', 'aprovado'),
+        supabase.from('vendas').select('preco, lucro, status'),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioHoje.toISOString()),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
-        supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioMes.toISOString())
+        supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioMes.toISOString()),
+        supabase.from('vendas')
+          .select(`
+            id,
+            mac_address,
+            valor,
+            created_at,
+            planos(nome),
+            mikrotiks(nome),
+            status
+          `)
+          .eq('status', 'aprovado')
+          .order('created_at', { ascending: false })
+          .limit(10)
       ]);
 
       // Buscar dados detalhados dos MACs apenas dos MikroTiks ativos
@@ -201,7 +223,7 @@ function Dashboard() {
         
         const macsData = macsRes.data || [];
         totalMacs = macsData.length;
-        macsConectados = macsData.filter(mac => mac.status === 'conectado' || mac.status === 'connected').length;
+        macsConectados = macsData.filter(mac => mac.status === 'conectado').length;
       }
 
       // Calcular estatísticas por período
@@ -238,7 +260,7 @@ function Dashboard() {
         receitaHoje: receitaHoje,
         receitaSemana: receitaSemana,
         receitaMes: receitaMes,
-        mikrotiksOnline: mikrotiksStatus?.filter(m => m.is_online).length || 0,
+        mikrotiksOnline: mikrotiksStatus?.filter(m => m.heartbeat_version).length || 0,
         mikrotiksTotal: mikrotiksStatus?.length || 0,
         macsOnline: macsConectados,
         macsTotal: totalMacs,
@@ -251,82 +273,42 @@ function Dashboard() {
           id,
           mac_address,
           valor,
-          data,
-          planos!inner(nome),
-          mikrotiks!inner(nome),
+          created_at,
+          planos(nome),
+          mikrotiks(nome),
           status
         `)
         .eq('status', 'aprovado')
-        .order('data', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(10);
 
-      const recentSales = (recentSalesData || []).map((sale: any) => ({
+      const recentSales = (recentSalesData as DatabaseSale[] || []).map(sale => ({
         id: sale.id,
         mac_address: sale.mac_address,
         valor: sale.valor,
-        created_at: sale.data,
-        plano_nome: sale.planos?.nome || 'Plano não encontrado',
-        mikrotik_nome: sale.mikrotiks?.nome || 'MikroTik não encontrado'
+        created_at: sale.created_at,
+        plano_nome: sale.planos?.[0]?.nome || 'Plano não encontrado',
+        mikrotik_nome: sale.mikrotiks?.[0]?.nome || 'MikroTik não encontrado'
       }));
 
       setRecentSales(recentSales);
 
-      // Carregar top MikroTiks por valor de vendas
-      const { data: mikrotiksComVendas } = await supabase
-        .from('vendas')
-        .select(`
-          mikrotik_id,
-          preco,
-          mikrotiks!inner(nome)
-        `)
-        .eq('status', 'aprovado');
+      // Carregar top MikroTiks
+      const { data: topMikrotiksData } = await supabase
+        .from('mikrotiks')
+        .select('id, nome, total_vendas, total_valor')
+        .order('total_valor', { ascending: false })
+        .limit(5);
 
-      // Agrupar e calcular totais por MikroTik
-      const mikrotikTotals = (mikrotiksComVendas || []).reduce((acc: Record<string, TopMikrotik>, venda: any) => {
-        const mikrotikId = venda.mikrotik_id;
-        if (!acc[mikrotikId]) {
-          acc[mikrotikId] = {
-            id: mikrotikId,
-            nome: venda.mikrotiks?.nome || 'MikroTik sem nome',
-            total_vendas: 0,
-            total_valor: 0
-          };
-        }
-        acc[mikrotikId].total_vendas += 1;
-        acc[mikrotikId].total_valor += Number(venda.preco) || 0;
-        return acc;
-      }, {});
-
-      const topMikrotiksArray = Object.values(mikrotikTotals)
-        .sort((a, b) => b.total_valor - a.total_valor)
-        .slice(0, 5);
-
-      setTopMikrotiks(topMikrotiksArray);
-
-      // Carregar top usuários por saldo
+      // Carregar top usuários
       const { data: topUsersData } = await supabase
-        .from('clientes')
-        .select('id, email, nome, saldo')
+        .from('users')
+        .select('id, email, total_vendas, saldo')
         .order('saldo', { ascending: false })
         .limit(6);
 
-      // Calcular total de vendas por cliente
-      const { data: vendasPorCliente } = await supabase
-        .from('vendas')
-        .select('cliente_id')
-        .eq('status', 'aprovado');
-
-      const clienteVendas = (vendasPorCliente || []).reduce((acc, venda) => {
-        acc[venda.cliente_id] = (acc[venda.cliente_id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-      const topUsersWithVendas = (topUsersData || []).map(user => ({
-        ...user,
-        total_vendas: clienteVendas[user.id] || 0
-      }));
-
-      setTopUsers(topUsersWithVendas);
+      setTopMikrotiks(topMikrotiksData || []);
+      setTopUsers(topUsersData || []);
 
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
@@ -375,7 +357,7 @@ function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600">Meu Lucro Hoje</p>
               <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(stats.lucroHoje)}
+                R$ {stats.lucroHoje.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Comissão do dia
@@ -392,7 +374,7 @@ function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600">Meu Lucro da Semana</p>
               <p className="text-2xl font-bold text-blue-600">
-                {formatCurrency(stats.lucroSemana)}
+                R$ {stats.lucroSemana.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Últimos 7 dias
@@ -409,7 +391,7 @@ function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600">Meu Lucro do Mês</p>
               <p className="text-2xl font-bold text-purple-600">
-                {formatCurrency(stats.lucroMes)}
+                R$ {stats.lucroMes.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 {new Date().toLocaleDateString('pt-BR', { month: 'long' })}
@@ -429,7 +411,7 @@ function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600">Receita Total Hoje</p>
               <p className="text-2xl font-bold text-emerald-600">
-                {formatCurrency(stats.receitaHoje)}
+                R$ {stats.receitaHoje.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Vendas de hoje
@@ -446,7 +428,7 @@ function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600">Receita Total da Semana</p>
               <p className="text-2xl font-bold text-cyan-600">
-                {formatCurrency(stats.receitaSemana)}
+                R$ {stats.receitaSemana.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Últimos 7 dias
@@ -463,7 +445,7 @@ function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600">Receita Total do Mês</p>
               <p className="text-2xl font-bold text-indigo-600">
-                {formatCurrency(stats.receitaMes)}
+                R$ {stats.receitaMes.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 {new Date().toLocaleDateString('pt-BR', { month: 'long' })}
@@ -576,115 +558,95 @@ function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {topMikrotiks.length > 0 ? (
-                topMikrotiks.map((mikrotik, index) => (
-                  <div key={mikrotik.id} className="flex items-center space-x-4">
-                    <div className="flex-none w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                      <span className="font-bold text-gray-700">#{index + 1}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{mikrotik.nome}</p>
-                      <p className="text-sm text-gray-500">{mikrotik.total_vendas} vendas</p>
-                    </div>
-                    <div className="flex-none">
-                      <span className="text-sm font-medium text-gray-900">{formatCurrency(mikrotik.total_valor)}</span>
-                    </div>
+              {topMikrotiks.map((mikrotik, index) => (
+                <div key={mikrotik.id} className="flex items-center space-x-4">
+                  <div className="flex-none w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                    <span className="font-bold text-gray-700">#{index + 1}</span>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <p>Nenhuma venda registrada ainda</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{mikrotik.nome}</p>
+                    <p className="text-sm text-gray-500">{mikrotik.total_vendas} vendas</p>
+                  </div>
+                  <div className="flex-none">
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(mikrotik.total_valor)}</span>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Top Users e Vendas Recentes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Users Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Usuários</CardTitle>
-            <CardDescription>Ranking por saldo disponível</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {topUsers.length > 0 ? (
-                topUsers.map((user, index) => (
-                  <div key={user.id} className="flex items-center space-x-4">
-                    <div className="flex-none w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                      <span className="font-bold text-gray-700">#{index + 1}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {user.nome || user.email}
-                      </p>
-                      <p className="text-sm text-gray-500">{user.total_vendas} vendas</p>
-                    </div>
-                    <div className="flex-none">
-                      <span className="text-sm font-medium text-gray-900">{formatCurrency(user.saldo)}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <p>Nenhum usuário encontrado</p>
+      {/* Top Users Card */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Top Usuários</CardTitle>
+          <CardDescription>Ranking por saldo disponível</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {topUsers.map((user, index) => (
+              <div key={user.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex-none w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="font-bold text-blue-700">#{index + 1}</span>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
+                  <p className="text-sm text-gray-500">{user.total_vendas} vendas</p>
+                </div>
+                <div className="flex-none">
+                  <span className="text-sm font-medium text-emerald-600">{formatCurrency(user.saldo)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Vendas Recentes Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Vendas Recentes</CardTitle>
-            <CardDescription>Últimas 10 vendas aprovadas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentSales.length > 0 ? (
-                recentSales.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 font-mono">
-                        {sale.mac_address}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {sale.plano_nome} • {sale.mikrotik_nome}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(sale.created_at).toLocaleString('pt-BR')}
-                      </p>
-                    </div>
-                    <div className="flex-none ml-4">
-                      <span className="text-sm font-medium text-green-600">
-                        {formatCurrency(sale.valor)}
-                      </span>
-                    </div>
+      {/* Recent Sales Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Vendas Recentes</CardTitle>
+          <CardDescription>Últimas transações realizadas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentSales.map((sale) => (
+              <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <ShoppingCart className="w-5 h-5 text-blue-600" />
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <p>Nenhuma venda recente</p>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{sale.mac_address}</p>
+                    <p className="text-sm text-gray-500">{sale.plano_nome}</p>
+                    <p className="text-xs text-gray-400">{new Date(sale.created_at).toLocaleString('pt-BR')}</p>
+                  </div>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(sale.valor)}</p>
+                  <p className="text-xs text-gray-500">{sale.mikrotik_nome}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
+// Componente simples para outras páginas
 function SimplePage({ title }: { title: string }) {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">{title}</h1>
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <p className="text-gray-600">Conteúdo da página {title} será implementado aqui.</p>
+      <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <BarChart3 className="w-8 h-8 text-gray-400" />
+        </div>
+        <p className="text-gray-600 text-lg font-medium mb-2">Esta página está sendo desenvolvida</p>
+        <p className="text-gray-500">Em breve teremos mais funcionalidades!</p>
       </div>
     </div>
   );
@@ -696,183 +658,139 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   const { pendingCount } = usePendingWithdrawals();
 
   const navigation = [
-    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-    { name: 'Usuários', href: '/admin/users', icon: Users },
-    { name: 'MikroTiks', href: '/admin/mikrotiks', icon: Router },
-    { name: 'Senhas', href: '/admin/passwords', icon: Key },
-    { name: 'MACs', href: '/admin/macs', icon: Monitor },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Usuários', href: '/users', icon: Users },
+    { name: 'MikroTiks', href: '/mikrotiks', icon: Router },
+    { name: 'Senhas', href: '/passwords', icon: Key },
+    { name: 'MACs', href: '/macs', icon: Monitor },
     { 
       name: 'Saques', 
-      href: '/admin/withdrawals', 
+      href: '/withdrawals', 
       icon: CreditCard,
       badge: pendingCount > 0 ? pendingCount : undefined
     },
-    { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 },
-    { name: 'Configurações', href: '/admin/settings', icon: Settings },
+    { name: 'Relatórios', href: '/reports', icon: BarChart3 },
   ];
 
   const isActivePath = (href: string) => {
-    if (href === '/admin') {
-      return location.pathname === '/admin';
-    }
-    return location.pathname.startsWith(href);
+    return location.pathname === href;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar para desktop */}
-      <div className="hidden lg:flex lg:flex-shrink-0">
-        <div className="flex flex-col w-64">
-          <div className="flex flex-col flex-grow bg-white border-r border-gray-200 pt-5 pb-4 overflow-y-auto">
-            <div className="flex items-center flex-shrink-0 px-4">
-              <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      {/* Sidebar mobile overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-600 to-blue-700">
+            <div>
+              <h2 className="text-xl font-bold text-white">{import.meta.env.VITE_APP_NAME || 'Pix Mikro'}</h2>
+              <p className="text-blue-100 text-sm">{import.meta.env.VITE_APP_DESCRIPTION || 'Sistema de Vendas WiFi'}</p>
             </div>
-            <div className="mt-5 flex-grow flex flex-col">
-              <nav className="flex-1 px-2 space-y-1">
-                {navigation.map((item) => {
-                  const isActive = isActivePath(item.href);
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive
-                          ? 'bg-blue-100 text-blue-900'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      <item.icon
-                        className={`mr-3 flex-shrink-0 h-5 w-5 ${
-                          isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
-                        }`}
-                      />
-                      {item.name}
-                      {item.badge && (
-                        <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-              <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-                <div className="flex-shrink-0 w-full group block">
-                  <div className="flex items-center">
-                    <div className="ml-3">
-                      <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                        {user.email}
-                      </p>
-                      <button
-                        onClick={onLogout}
-                        className="flex items-center text-xs font-medium text-gray-500 group-hover:text-gray-700"
-                      >
-                        <LogOut className="mr-1 h-3 w-3" />
-                        Sair
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 rounded-md text-blue-100 hover:text-white hover:bg-blue-500/20"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* User info */}
+          <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-blue-50">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                <UserCheck className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">{user.name || user.email}</p>
+                <p className="text-sm text-blue-600 font-medium capitalize">{user.role}</p>
               </div>
             </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                to={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  isActivePath(item.href)
+                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <div className="flex items-center">
+                  <item.icon className={`w-5 h-5 mr-3 ${isActivePath(item.href) ? 'text-blue-600' : ''}`} />
+                  {item.name}
+                </div>
+                {item.badge && (
+                  <div className="flex items-center">
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full animate-pulse">
+                      {item.badge}
+                    </span>
+                    <AlertCircle className="w-3 h-3 text-red-500 ml-1" />
+                  </div>
+                )}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Logout */}
+          <div className="p-4 border-t">
+            <button
+              onClick={onLogout}
+              className="w-full flex items-center px-3 py-2.5 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <LogOut className="w-5 h-5 mr-3" />
+              Sair
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Sidebar móvel */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 flex z-40 lg:hidden">
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white">
-            <div className="absolute top-0 right-0 -mr-12 pt-2">
-              <button
-                className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <X className="h-6 w-6 text-white" />
-              </button>
-            </div>
-            <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
-              <div className="flex-shrink-0 flex items-center px-4">
-                <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
-              </div>
-              <nav className="mt-5 px-2 space-y-1">
-                {navigation.map((item) => {
-                  const isActive = isActivePath(item.href);
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      onClick={() => setSidebarOpen(false)}
-                      className={`group flex items-center px-2 py-2 text-base font-medium rounded-md ${
-                        isActive
-                          ? 'bg-blue-100 text-blue-900'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      <item.icon
-                        className={`mr-4 flex-shrink-0 h-6 w-6 ${
-                          isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
-                        }`}
-                      />
-                      {item.name}
-                      {item.badge && (
-                        <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-            <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-              <div className="flex-shrink-0 w-full group block">
-                <div className="flex items-center">
-                  <div className="ml-3">
-                    <p className="text-base font-medium text-gray-700 group-hover:text-gray-900">
-                      {user.email}
-                    </p>
-                    <button
-                      onClick={onLogout}
-                      className="flex items-center text-sm font-medium text-gray-500 group-hover:text-gray-700"
-                    >
-                      <LogOut className="mr-1 h-4 w-4" />
-                      Sair
-                    </button>
-                  </div>
-                </div>
-              </div>
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <div className="flex h-16 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6">
+          <button
+            type="button"
+            className="lg:hidden p-2.5 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
+            <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" />
+              <span className="text-sm text-gray-500">
+                Bem-vindo, {user.name || user.email}
+              </span>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Conteúdo principal */}
-      <div className="flex-1 overflow-hidden">
-        <div className="lg:hidden">
-          <div className="flex items-center justify-between bg-white px-4 py-2 border-b border-gray-200">
-            <h1 className="text-lg font-medium text-gray-900">Admin Panel</h1>
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-          </div>
-        </div>
-
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/users" element={<UsersManagement />} />
-            <Route path="/mikrotiks" element={<MikrotiksManagement />} />
+            <Route path="/mikrotiks" element={<MikrotiksManagement currentUser={user} />} />
             <Route path="/passwords" element={<PasswordsManagement />} />
             <Route path="/macs" element={<MacsManagement />} />
             <Route path="/withdrawals" element={<WithdrawalsManagement />} />
             <Route path="/reports" element={<ReportsManagement />} />
-            <Route path="/settings" element={<SiteSettings />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
