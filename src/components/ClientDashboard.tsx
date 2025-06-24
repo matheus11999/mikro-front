@@ -227,12 +227,12 @@ function DashboardContent() {
           id,
           mac_address,
           status,
-          connected_at,
+          ultimo_acesso,
           mikrotiks(nome)
         `)
         .in('mikrotik_id', userMikrotikIds)
         .in('status', ['connected', 'conectado'])
-        .order('connected_at', { ascending: false })
+        .order('ultimo_acesso', { ascending: false })
         .limit(10);
 
       setStats({
@@ -396,12 +396,12 @@ function DashboardContent() {
         <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Saldo Disponível</p>
+              <p className="text-sm font-medium text-gray-600">Lucro Total</p>
               <p className="text-2xl font-bold text-green-600">
-                R$ {stats.saldo.toFixed(2)}
+                R$ {(stats.lucroHoje + stats.lucroSemana + stats.lucroMes).toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Disponível para saque
+                Todas as vendas aprovadas
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -413,10 +413,10 @@ function DashboardContent() {
         <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Meu Lucro</p>
-              <p className="text-2xl font-bold text-green-600">R$ {stats.lucroHoje.toFixed(2)}</p>
+              <p className="text-sm font-medium text-gray-600">Saldo</p>
+              <p className="text-2xl font-bold text-green-600">R$ {stats.saldo.toFixed(2)}</p>
               <p className="text-xs text-gray-500 mt-1">
-                Valor creditado para você
+                Disponível para saque
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -550,9 +550,9 @@ function DashboardContent() {
                       <p className="text-sm text-blue-600 font-medium">
                         {mac.mikrotiks?.nome || 'MikroTik'}
                       </p>
-                      {mac.connected_at && (
+                      {mac.ultimo_acesso && (
                         <p className="text-xs text-gray-500">
-                          Conectado: {new Date(mac.connected_at).toLocaleDateString('pt-BR', {
+                          Último acesso: {new Date(mac.ultimo_acesso).toLocaleDateString('pt-BR', {
                             day: '2-digit',
                             month: '2-digit',
                             hour: '2-digit',
@@ -1482,7 +1482,7 @@ function ClientReports() {
       </div>
 
       {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -1499,28 +1499,17 @@ function ClientReports() {
         <div className="bg-white rounded-xl shadow-sm border p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Valor Total</p>
-              <p className="text-2xl font-bold text-green-600">R$ {stats.valorTotal.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">Preço total dos planos vendidos</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between">
-            <div>
               <p className="text-sm font-medium text-gray-600">Lucro Total</p>
               <p className="text-2xl font-bold text-purple-600">R$ {stats.lucroTotal.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">Sua parte das vendas</p>
+              <p className="text-xs text-gray-500 mt-1">Saldo</p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <TrendingUp className="w-6 h-6 text-purple-600" />
             </div>
           </div>
         </div>
+
+
       </div>
 
       {/* Status das Vendas */}
