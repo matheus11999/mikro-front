@@ -335,264 +335,287 @@ export default function SiteSettings() {
   };
 
   const renderSettingInput = (setting: SiteSetting) => {
-    const isSecret = setting.key.includes('key') || setting.key.includes('token') || setting.key.includes('secret') || setting.key.includes('id');
+    const isSecret = !setting.is_public && !showSecrets;
     const isUploading = uploadingFiles[setting.key];
-    
-    switch (setting.type) {
-      case 'boolean':
-        return (
-          <div className="flex items-center space-x-2">
-            <Switch
-              checked={setting.value === 'true'}
-              onCheckedChange={(checked) => handleSettingChange(setting.key, checked ? 'true' : 'false')}
-            />
-            <span className="text-sm text-gray-600">
-              {setting.value === 'true' ? 'Ativado' : 'Desativado'}
-            </span>
+
+    if (setting.type === 'file') {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <label className="text-sm font-medium text-gray-900">{setting.label}</label>
+              <p className="text-xs text-gray-500 mt-1">{setting.description}</p>
+            </div>
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Image className="w-4 h-4 text-blue-600" />
+            </div>
           </div>
-        );
-      
-      case 'number':
-        return (
-          <Input
-            type="number"
-            value={setting.value}
-            onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-            className="w-full"
-          />
-        );
-      
-      case 'file':
-        return (
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <Input
-                type="text"
-                value={setting.value}
-                onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-                placeholder="URL do arquivo ou faça upload"
-                className="flex-1"
+          
+          <div className="space-y-3">
+            {setting.value && (
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Arquivo atual</p>
+                    <p className="text-xs text-gray-500">
+                      {setting.value.split('/').pop()}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <a 
+                    href={setting.value} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </a>
+                  <button
+                    onClick={() => handleSettingChange(setting.key, '')}
+                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex items-center space-x-3">
+              <input
+                ref={el => fileInputRefs.current[setting.key] = el}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleFileUpload(setting.key, file);
+                  }
+                }}
+                className="hidden"
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
+              <button
                 onClick={() => fileInputRefs.current[setting.key]?.click()}
                 disabled={isUploading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 {isUploading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <Upload className="w-4 h-4" />
                 )}
-              </Button>
+                {isUploading ? 'Enviando...' : 'Selecionar Arquivo'}
+              </button>
             </div>
-            <input
-              ref={(el) => fileInputRefs.current[setting.key] = el}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  handleFileUpload(setting.key, file);
-                }
-              }}
-            />
-            {setting.value && (
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <Image className="w-4 h-4" />
-                <span>Arquivo atual: {setting.value.split('/').pop()}</span>
-              </div>
-            )}
           </div>
-        );
-      
-      case 'json':
-        return (
-          <Textarea
-            value={setting.value}
-            onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-            placeholder="JSON válido"
-            className="w-full min-h-[100px] font-mono text-sm"
-          />
-        );
-      
-      default: // string
-        if (setting.description?.includes('textarea') || setting.value.length > 100) {
-          return (
-            <Textarea
-              value={setting.value}
-              onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-              className="w-full min-h-[80px]"
-            />
-          );
-        }
-        
-        return (
-          <Input
-            type={isSecret && !showSecrets ? 'password' : 'text'}
-            value={setting.value}
-            onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-            className="w-full"
-          />
-        );
+        </div>
+      );
     }
+
+    if (setting.type === 'boolean') {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-gray-900">{setting.label}</label>
+              <p className="text-xs text-gray-500 mt-1">{setting.description}</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Switch
+                checked={setting.value === 'true'}
+                onCheckedChange={(checked) => handleSettingChange(setting.key, checked.toString())}
+              />
+              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                <Settings className="w-4 h-4 text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border p-4 hover:shadow-md transition-shadow">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <label className="text-sm font-medium text-gray-900">{setting.label}</label>
+            <p className="text-xs text-gray-500 mt-1">{setting.description}</p>
+          </div>
+          <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+            {setting.type === 'string' && <FileText className="w-4 h-4 text-gray-600" />}
+            {setting.type === 'number' && <BarChart3 className="w-4 h-4 text-gray-600" />}
+            {setting.type === 'json' && <Settings className="w-4 h-4 text-gray-600" />}
+          </div>
+        </div>
+        
+        <div className="relative">
+          {setting.type === 'string' && setting.key.includes('description') ? (
+            <Textarea
+              value={isSecret ? '••••••••' : setting.value || ''}
+              onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+              placeholder={`Digite ${setting.label.toLowerCase()}...`}
+              disabled={isSecret}
+              className="w-full"
+              rows={3}
+            />
+          ) : (
+            <Input
+              type={setting.type === 'number' ? 'number' : isSecret ? 'password' : 'text'}
+              value={isSecret ? '••••••••' : setting.value || ''}
+              onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+              placeholder={`Digite ${setting.label.toLowerCase()}...`}
+              disabled={isSecret}
+              className="w-full"
+            />
+          )}
+          {!setting.is_public && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <Shield className="w-4 h-4 text-orange-500" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-64"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+            <span>Carregando configurações...</span>
+          </div>
         </div>
       </div>
     );
   }
 
-  const categories = Object.keys(categoryLabels);
-  const hasSettings = Object.keys(settings).length > 0;
+  const categories = Object.keys(settings).length > 0 
+    ? Object.keys(settings) 
+    : Object.keys(defaultSettings).reduce((acc, key) => {
+        const category = (defaultSettings as any)[key].category;
+        if (!acc.includes(category)) acc.push(category);
+        return acc;
+      }, [] as string[]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Configurações do Site</h1>
-          <p className="text-gray-600 mt-2">Configure SEO, aparência e outras opções do site</p>
-        </div>
+        <h1 className="text-3xl font-bold text-gray-900">Configurações do Site</h1>
         <div className="flex items-center space-x-3">
-          {!hasSettings && (
-            <Button
-              onClick={initializeDefaultSettings}
-              disabled={saving}
-              variant="outline"
-            >
-              {saving ? (
-                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Plus className="w-4 h-4 mr-2" />
-              )}
-              Configurações Padrão
-            </Button>
-          )}
-          <Button
+          <button
             onClick={() => setShowSecrets(!showSecrets)}
-            variant="outline"
-            size="sm"
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
           >
             {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </Button>
-          <Button
+            {showSecrets ? 'Ocultar Privadas' : 'Mostrar Privadas'}
+          </button>
+          <button
             onClick={loadSettings}
-            variant="outline"
-            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </button>
+          <button
             onClick={saveSettings}
             disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            {saving ? (
-              <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            Salvar
-          </Button>
+            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? 'Salvando...' : 'Salvar Tudo'}
+          </button>
         </div>
       </div>
 
+      {/* Message */}
       {message && (
-        <div className={`p-4 rounded-lg border ${
+        <div className={`p-4 rounded-xl border ${
           message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
           message.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
           'bg-blue-50 border-blue-200 text-blue-800'
         }`}>
           <div className="flex items-center space-x-2">
-            {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> :
-             message.type === 'error' ? <AlertCircle className="w-5 h-5" /> :
-             <Info className="w-5 h-5" />}
-            <span>{message.text}</span>
+            {message.type === 'success' && <CheckCircle className="w-5 h-5" />}
+            {message.type === 'error' && <AlertCircle className="w-5 h-5" />}
+            {message.type === 'info' && <Info className="w-5 h-5" />}
+            <span className="font-medium">{message.text}</span>
           </div>
         </div>
       )}
 
-      {!hasSettings ? (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Settings className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma configuração encontrada</h3>
-            <p className="text-gray-500 mb-4">Clique em "Configurações Padrão" para inicializar o sistema.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-6">
-            {categories.map((category) => {
-              const Icon = categoryIcons[category as keyof typeof categoryIcons];
-              const hasData = settings[category]?.length > 0;
-              return (
-                <TabsTrigger 
-                  key={category} 
-                  value={category}
-                  className="flex items-center space-x-2"
-                  disabled={!hasData}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{categoryLabels[category as keyof typeof categoryLabels]}</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
+      {/* Tabs */}
+      <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
+        <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 mb-6">
+          {categories.map((category) => {
+            const Icon = categoryIcons[category as keyof typeof categoryIcons] || Settings;
+            return (
+              <TabsTrigger 
+                key={category} 
+                value={category}
+                className="flex items-center gap-2 text-xs"
+              >
+                <Icon className="w-4 h-4" />
+                <span className="hidden sm:inline">
+                  {categoryLabels[category as keyof typeof categoryLabels] || category}
+                </span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
-          {categories.map((category) => (
-            <TabsContent key={category} value={category}>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    {React.createElement(categoryIcons[category as keyof typeof categoryIcons], { className: "w-5 h-5" })}
-                    <span>{categoryLabels[category as keyof typeof categoryLabels]}</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Configure as opções de {categoryLabels[category as keyof typeof categoryLabels].toLowerCase()}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {settings[category]?.map((setting) => (
-                    <div key={setting.key} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <label className="text-sm font-medium text-gray-900">
-                            {setting.label}
-                          </label>
-                          {setting.description && (
-                            <p className="text-sm text-gray-500">{setting.description}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {!setting.is_public && (
-                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                              Privado
-                            </span>
-                          )}
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                            {setting.type}
-                          </span>
-                        </div>
-                      </div>
-                      {renderSettingInput(setting)}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          ))}
-        </Tabs>
-      )}
+        {categories.map((category) => (
+          <TabsContent key={category} value={category} className="space-y-4">
+            <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200 p-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                  {React.createElement(categoryIcons[category as keyof typeof categoryIcons] || Settings, {
+                    className: "w-6 h-6 text-blue-700"
+                  })}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-blue-900">
+                    {categoryLabels[category as keyof typeof categoryLabels] || category}
+                  </h2>
+                  <p className="text-sm text-blue-700">
+                    Configure as opções desta categoria
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              {settings[category]?.length > 0 ? (
+                settings[category].map((setting) => (
+                  <div key={setting.key}>
+                    {renderSettingInput(setting)}
+                  </div>
+                ))
+              ) : (
+                <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Settings className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-600 text-lg font-medium mb-2">Nenhuma configuração encontrada</p>
+                  <p className="text-gray-500 mb-4">Esta categoria ainda não possui configurações.</p>
+                  <button
+                    onClick={initializeDefaultSettings}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Criar Configurações Padrão
+                  </button>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 } 

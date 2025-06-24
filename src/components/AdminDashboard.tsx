@@ -86,7 +86,6 @@ interface TopUser {
   id: string;
   email: string;
   nome?: string;
-  total_vendas: number;
   saldo: number;
 }
 
@@ -202,7 +201,7 @@ function Dashboard() {
         // Agrupar vendas por MikroTik
         const mikrotikStats = mikrotikSales.reduce((acc, sale) => {
           const mikrotikId = sale.mikrotik_id;
-          const mikrotikNome = sale.mikrotiks?.nome || 'MikroTik Desconhecido';
+          const mikrotikNome = (sale.mikrotiks as any)?.nome || 'MikroTik Desconhecido';
           
           if (!acc[mikrotikId]) {
             acc[mikrotikId] = {
@@ -245,7 +244,6 @@ function Dashboard() {
           id: user.id,
           email: user.email,
           nome: user.nome,
-          total_vendas: 0, // Será calculado se necessário
           saldo: parseFloat(user.saldo || '0')
         })) || [];
 
@@ -308,10 +306,10 @@ function Dashboard() {
           data,
           descricao,
           status,
-          planos (
+          planos!inner (
             nome
           ),
-          mikrotiks (
+          mikrotiks!inner (
             nome
           ),
           clientes (
@@ -334,11 +332,11 @@ function Dashboard() {
           valor: parseFloat(sale.valor || '0'),
           data: sale.data,
           descricao: sale.descricao || 'Venda',
-          plano_nome: sale.planos?.nome || 'Plano Desconhecido',
-          mikrotik_nome: sale.mikrotiks?.nome || 'MikroTik Desconhecido',
-          cliente_nome: sale.clientes?.nome,
-          cliente_email: sale.clientes?.email,
-          mac_address: sale.macs?.mac_address || 'N/A',
+          plano_nome: (sale.planos as any)?.nome || 'Plano Desconhecido',
+          mikrotik_nome: (sale.mikrotiks as any)?.nome || 'MikroTik Desconhecido',
+          cliente_nome: (sale.clientes as any)?.nome,
+          cliente_email: (sale.clientes as any)?.email,
+          mac_address: (sale.macs as any)?.mac_address || 'N/A',
           status: sale.status
         })) || [];
 
@@ -412,239 +410,238 @@ function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Visão geral do sistema</p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button onClick={loadDashboardData} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Atualizar
-          </Button>
-        </div>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard Admin</h1>
+        <button
+          onClick={loadDashboardData}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Clientes</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalClientes}</div>
-            <p className="text-xs text-muted-foreground">Clientes registrados</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vendas Aprovadas</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalVendas}</div>
-            <p className="text-xs text-muted-foreground">Total de vendas</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">MikroTiks</CardTitle>
-            <Router className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.mikrotiksOnline}/{stats.mikrotiksTotal}
+      {/* Cards de Receita por Período - Estilo Cliente */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-800">Receita Hoje</p>
+              <p className="text-3xl font-bold text-blue-900">{formatCurrency(stats.receitaHoje)}</p>
+              <p className="text-sm text-blue-700 mt-1">
+                Lucro: {formatCurrency(stats.lucroHoje)}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">Online/Total</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">MACs</CardTitle>
-            <Wifi className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.macsOnline}/{stats.macsTotal}
+            <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-blue-700" />
             </div>
-            <p className="text-xs text-muted-foreground">Conectados/Total</p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl shadow-sm border border-green-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green-800">Receita da Semana</p>
+              <p className="text-3xl font-bold text-green-900">{formatCurrency(stats.receitaSemana)}</p>
+              <p className="text-sm text-green-700 mt-1">
+                Lucro: {formatCurrency(stats.lucroSemana)}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-green-200 rounded-lg flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-green-700" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl shadow-sm border border-purple-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-purple-800">Receita do Mês</p>
+              <p className="text-3xl font-bold text-purple-900">{formatCurrency(stats.receitaMes)}</p>
+              <p className="text-sm text-purple-700 mt-1">
+                Lucro: {formatCurrency(stats.lucroMes)}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-purple-200 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-purple-700" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Revenue Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Hoje</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.receitaHoje)}</div>
-            <p className="text-xs text-muted-foreground">
-              Lucro: {formatCurrency(stats.lucroHoje)}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Cards de Estatísticas Gerais - Estilo Cliente */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total de Clientes</p>
+              <p className="text-2xl font-bold text-green-600">{stats.totalClientes}</p>
+              <p className="text-xs text-gray-500 mt-1">Clientes registrados</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <Users className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Esta Semana</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.receitaSemana)}</div>
-            <p className="text-xs text-muted-foreground">
-              Lucro: {formatCurrency(stats.lucroSemana)}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Vendas Aprovadas</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.totalVendas}</p>
+              <p className="text-xs text-gray-500 mt-1">Total de vendas</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <ShoppingCart className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Este Mês</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.receitaMes)}</div>
-            <p className="text-xs text-muted-foreground">
-              Lucro: {formatCurrency(stats.lucroMes)}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">MikroTiks Online</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {stats.mikrotiksOnline}/{stats.mikrotiksTotal}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Equipamentos ativos</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Router className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">MACs Conectados</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {stats.macsOnline}/{stats.macsTotal}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">Dispositivos online</p>
+            </div>
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Wifi className="w-6 h-6 text-orange-600" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Rankings e Vendas Recentes */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {/* Rankings e Vendas Recentes - Estilo Cliente */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top MikroTiks */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Top MikroTiks</CardTitle>
-              <Select value={rankingPeriod} onValueChange={(value: PeriodFilter) => setRankingPeriod(value)}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Hoje</SelectItem>
-                  <SelectItem value="week">Semana</SelectItem>
-                  <SelectItem value="month">Mês</SelectItem>
-                  <SelectItem value="all">Todos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <CardDescription>
-              Ranking por vendas - {getPeriodLabel(rankingPeriod)}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topMikrotiks.length > 0 ? (
-                topMikrotiks.map((mikrotik, index) => (
-                  <div key={mikrotik.id} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium">{mikrotik.nome}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {mikrotik.total_vendas} vendas
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{formatCurrency(mikrotik.total_valor)}</p>
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Top MikroTiks</h3>
+            <Select value={rankingPeriod} onValueChange={(value: PeriodFilter) => setRankingPeriod(value)}>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Hoje</SelectItem>
+                <SelectItem value="week">Semana</SelectItem>
+                <SelectItem value="month">Mês</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">Ranking por vendas - {getPeriodLabel(rankingPeriod)}</p>
+          <div className="space-y-3">
+            {topMikrotiks.length > 0 ? (
+              topMikrotiks.map((mikrotik, index) => (
+                <div key={mikrotik.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{mikrotik.nome}</p>
+                      <p className="text-xs text-gray-500">{mikrotik.total_vendas} vendas</p>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhuma venda no período
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">{formatCurrency(mikrotik.total_valor)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                Nenhuma venda no período
+              </p>
+            )}
+          </div>
+        </div>
 
         {/* Top Usuários */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Top Usuários</CardTitle>
-            <CardDescription>Ranking por saldo disponível</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topUsers.length > 0 ? (
-                topUsers.map((user, index) => (
-                  <div key={user.id} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium">
-                          {user.nome || user.email.split('@')[0]}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {user.total_vendas} vendas • {user.email}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{formatCurrency(user.saldo)}</p>
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Usuários</h3>
+          <p className="text-sm text-gray-500 mb-4">Ranking por saldo disponível</p>
+          <div className="space-y-3">
+            {topUsers.length > 0 ? (
+              topUsers.map((user, index) => (
+                <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-bold">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {user.nome || user.email.split('@')[0]}
+                      </p>
+                      <p className="text-xs text-gray-500">{user.email}</p>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhum usuário encontrado
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-green-600">{formatCurrency(user.saldo)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                Nenhum usuário encontrado
+              </p>
+            )}
+          </div>
+        </div>
 
         {/* Vendas Recentes */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Vendas Recentes</CardTitle>
-            <CardDescription>Últimas transações realizadas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentSales.length > 0 ? (
-                recentSales.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{sale.plano_nome}</p>
-                      <p className="text-xs text-muted-foreground">
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas Recentes</h3>
+          <p className="text-sm text-gray-500 mb-4">Últimas transações realizadas</p>
+          <div className="space-y-3">
+            {recentSales.length > 0 ? (
+              recentSales.map((sale) => (
+                <div key={sale.id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <ShoppingCart className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{sale.plano_nome}</p>
+                      <p className="text-xs text-gray-500">
                         {sale.mikrotik_nome} • {formatDate(sale.data)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        MAC: {sale.mac_address}
+                      <p className="text-xs text-blue-600 font-medium">
+                        {sale.mac_address}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{formatCurrency(sale.valor)}</p>
-                      <p className="text-xs text-green-600">Aprovado</p>
-                    </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhuma venda recente
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">{formatCurrency(sale.valor)}</p>
+                    <p className="text-xs text-green-600">Aprovado</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                Nenhuma venda recente
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* MikroTik Status */}
