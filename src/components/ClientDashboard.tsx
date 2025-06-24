@@ -210,7 +210,7 @@ function DashboardContent() {
       const lucroMes = userVendasMes.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
       
       const totalMacs = userMacs.length;
-      const macsConectados = userMacs.filter(mac => mac.status === 'conectado').length;
+      const macsConectados = userMacs.filter(mac => mac.status === 'connected' || mac.status === 'conectado').length;
 
       // Calcular estatísticas de vendas
       const vendasHoje = userVendasHoje.length;
@@ -220,7 +220,7 @@ function DashboardContent() {
       const vendasMes = userVendasMes.length;
       const valorMes = userVendasMes.reduce((sum, v) => sum + parseFloat(v.preco || '0'), 0);
 
-      // Buscar MACs conectados com detalhes
+      // Buscar MACs conectados com detalhes (testando ambos os status possíveis)
       const { data: macsDetalhados } = await supabase
         .from('macs')
         .select(`
@@ -231,7 +231,7 @@ function DashboardContent() {
           mikrotiks(nome)
         `)
         .in('mikrotik_id', userMikrotikIds)
-        .eq('status', 'conectado')
+        .in('status', ['connected', 'conectado'])
         .order('connected_at', { ascending: false })
         .limit(10);
 
@@ -456,50 +456,127 @@ function DashboardContent() {
         </div>
       </div>
 
-      {/* MACs Conectados */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">MACs Conectados</h3>
-        <div className="space-y-3">
-          {connectedMacs.length > 0 ? (
-            connectedMacs.map((mac, index) => (
-              <div key={mac.id || index} className="flex items-center justify-between p-4 rounded-lg bg-green-50 border border-green-200">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <Wifi className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 font-mono text-sm">
-                      {mac.mac_address}
-                    </p>
-                    <p className="text-sm text-blue-600 font-medium">
-                      {mac.mikrotiks?.nome || 'MikroTik'}
-                    </p>
-                    {mac.connected_at && (
-                      <p className="text-xs text-gray-500">
-                        Conectado: {new Date(mac.connected_at).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Vendas recentes */}
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas Recentes</h3>
+          <div className="space-y-3">
+            {recentSales.length > 0 ? (
+              recentSales.map((sale, index) => {
+                const isPendente = sale.status === 'pendente';
+                const isAprovado = sale.status === 'aprovado';
+                const isCancelado = sale.status === 'cancelado';
+                
+                return (
+                  <div key={sale.id || index} className={`flex items-center justify-between p-4 rounded-lg ${
+                    isPendente ? 'bg-yellow-50 border border-yellow-200' :
+                    isAprovado ? 'bg-green-50' :
+                    'bg-red-50 border border-red-200'
+                  }`}>
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        isPendente ? 'bg-yellow-100' :
+                        isAprovado ? 'bg-green-100' :
+                        'bg-red-100'
+                      }`}>
+                        {isPendente ? (
+                          <Clock className="w-4 h-4 text-yellow-600 animate-pulse" />
+                        ) : isAprovado ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          R$ {parseFloat(sale.valor || '0').toFixed(2)}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(sale.data).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                        <p className="text-xs text-blue-600 font-medium">
+                          {sale.mikrotiks?.nome || 'MikroTik'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        isPendente ? 'text-yellow-700 bg-yellow-100' :
+                        isAprovado ? 'text-green-600 bg-green-100' :
+                        'text-red-600 bg-red-100'
+                      }`}>
+                        {isPendente ? 'Aguardando Pagamento' :
+                         isAprovado ? 'Aprovado' :
+                         'Cancelado'}
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {sale.planos?.nome || 'Plano'}
                       </p>
-                    )}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhuma venda realizada ainda</p>
+                <p className="text-sm">As vendas aparecerão aqui quando aprovadas</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* MACs Conectados */}
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">MACs Conectados</h3>
+          <div className="space-y-3">
+            {connectedMacs.length > 0 ? (
+              connectedMacs.map((mac, index) => (
+                <div key={mac.id || index} className="flex items-center justify-between p-4 rounded-lg bg-green-50 border border-green-200">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <Wifi className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 font-mono text-sm">
+                        {mac.mac_address}
+                      </p>
+                      <p className="text-sm text-blue-600 font-medium">
+                        {mac.mikrotiks?.nome || 'MikroTik'}
+                      </p>
+                      {mac.connected_at && (
+                        <p className="text-xs text-gray-500">
+                          Conectado: {new Date(mac.connected_at).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-2 py-1 rounded-full text-xs font-medium text-green-700 bg-green-100">
+                      Online
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="px-2 py-1 rounded-full text-xs font-medium text-green-700 bg-green-100">
-                    Online
-                  </span>
-                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Wifi className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum MAC conectado</p>
+                <p className="text-sm">MACs conectados aparecerão aqui</p>
               </div>
-            ))
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Wifi className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>Nenhum MAC conectado</p>
-              <p className="text-sm">MACs conectados aparecerão aqui</p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
