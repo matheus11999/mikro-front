@@ -50,6 +50,54 @@ interface ClientStats {
   lucroHoje: number;
   lucroSemana: number;
   lucroMes: number;
+  lucroTotal: number;
+}
+
+interface Plano {
+  id: string;
+  nome: string;
+  duracao: number;
+}
+
+interface Venda {
+  id: string;
+  plano_id: Plano;
+  pagamento_aprovado_em: string;
+}
+
+interface Mac {
+  id: string;
+  mac_address: string;
+  status: string;
+  ultimo_acesso: string;
+  mikrotiks: {
+    nome: string;
+  } | null;
+  vendas: Venda[];
+  plano_atual?: {
+    nome: string;
+    duracao: number;
+  };
+  tempo_restante?: number;
+}
+
+interface MacResponse {
+  id: string;
+  mac_address: string;
+  status: string;
+  ultimo_acesso: string;
+  mikrotiks: {
+    nome: string;
+  } | null;
+  vendas: {
+    id: string;
+    plano_id: {
+      id: string;
+      nome: string;
+      duracao: number;
+    };
+    pagamento_aprovado_em: string;
+  }[];
 }
 
 // Dashboard principal do cliente
@@ -63,11 +111,12 @@ function DashboardContent() {
     totalMacs: 0,
     lucroHoje: 0,
     lucroSemana: 0,
-    lucroMes: 0
+    lucroMes: 0,
+    lucroTotal: 0
   });
   const [loading, setLoading] = useState(true);
   const [recentSales, setRecentSales] = useState<any[]>([]);
-  const [connectedMacs, setConnectedMacs] = useState<any[]>([]);
+  const [connectedMacs, setConnectedMacs] = useState<Mac[]>([]);
   const [salesStats, setSalesStats] = useState({
     vendasHoje: 0,
     valorHoje: 0,
@@ -209,6 +258,12 @@ function DashboardContent() {
       const lucroSemana = userVendasSemana.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
       const lucroMes = userVendasMes.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
       
+      // Calcular lucro total de todas as vendas aprovadas do usuário
+      const userVendasAprovadas = allVendasTodas.filter(venda => 
+        userMikrotikIds.includes(venda.mikrotik_id) && venda.status === 'aprovado'
+      );
+      const lucroTotal = userVendasAprovadas.reduce((sum, v) => sum + parseFloat(v.valor || '0'), 0);
+      
       const totalMacs = userMacs.length;
       const macsConectados = userMacs.filter(mac => mac.status === 'connected' || mac.status === 'conectado').length;
 
@@ -228,12 +283,64 @@ function DashboardContent() {
           mac_address,
           status,
           ultimo_acesso,
-          mikrotiks(nome)
+          mikrotiks(nome),
+          vendas!inner(
+            id,
+            plano_id(
+              id,
+              nome,
+              duracao
+            ),
+            pagamento_aprovado_em
+          )
         `)
         .in('mikrotik_id', userMikrotikIds)
         .in('status', ['connected', 'conectado'])
+        .eq('vendas.status', 'aprovado')
         .order('ultimo_acesso', { ascending: false })
         .limit(10);
+
+      // Processar MACs para adicionar informações do plano e tempo restante
+      const macsProcessados = (macsDetalhados || []).map((rawMac: any) => {
+        const mac: MacResponse = {
+          id: rawMac.id,
+          mac_address: rawMac.mac_address,
+          status: rawMac.status,
+          ultimo_acesso: rawMac.ultimo_acesso,
+          mikrotiks: rawMac.mikrotiks ? { nome: rawMac.mikrotiks.nome } : null,
+          vendas: rawMac.vendas.map((venda: any) => ({
+            id: venda.id,
+            plano_id: {
+              id: venda.plano_id.id,
+              nome: venda.plano_id.nome,
+              duracao: venda.plano_id.duracao
+            },
+            pagamento_aprovado_em: venda.pagamento_aprovado_em
+          }))
+        };
+
+        // Pegar a venda mais recente do MAC
+        const ultimaVenda = mac.vendas[mac.vendas.length - 1];
+        if (!ultimaVenda || !ultimaVenda.plano_id || !ultimaVenda.pagamento_aprovado_em) {
+          return mac as Mac;
+        }
+
+        // Calcular tempo restante
+        const inicioPlano = new Date(ultimaVenda.pagamento_aprovado_em);
+        const duracaoMinutos = ultimaVenda.plano_id.duracao || 60;
+        const fimPlano = new Date(inicioPlano.getTime() + duracaoMinutos * 60000);
+        const agora = new Date();
+        const tempoRestanteMinutos = Math.max(0, Math.floor((fimPlano.getTime() - agora.getTime()) / 60000));
+
+        return {
+          ...mac,
+          plano_atual: {
+            nome: ultimaVenda.plano_id.nome,
+            duracao: duracaoMinutos
+          },
+          tempo_restante: tempoRestanteMinutos
+        } as Mac;
+      });
 
       setStats({
         saldo: saldo,
@@ -244,7 +351,8 @@ function DashboardContent() {
         totalMacs: totalMacs,
         lucroHoje: lucroHoje,
         lucroSemana: lucroSemana,
-        lucroMes: lucroMes
+        lucroMes: lucroMes,
+        lucroTotal: lucroTotal
       });
 
       setSalesStats({
@@ -257,7 +365,7 @@ function DashboardContent() {
       });
 
       setRecentSales(userRecentVendas);
-      setConnectedMacs(macsDetalhados || []);
+      setConnectedMacs(macsProcessados);
 
     } catch (error: any) {
       console.error('❌ Erro ao carregar dados do dashboard (VPS):', error);
@@ -272,7 +380,8 @@ function DashboardContent() {
         totalMacs: 0,
         lucroHoje: 0,
         lucroSemana: 0,
-        lucroMes: 0
+        lucroMes: 0,
+        lucroTotal: 0
       });
       setRecentSales([]);
     } finally {
@@ -398,7 +507,7 @@ function DashboardContent() {
             <div>
               <p className="text-sm font-medium text-gray-600">Lucro Total</p>
               <p className="text-2xl font-bold text-green-600">
-                R$ {(stats.lucroHoje + stats.lucroSemana + stats.lucroMes).toFixed(2)}
+                R$ {stats.lucroTotal.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Todas as vendas aprovadas
@@ -558,6 +667,11 @@ function DashboardContent() {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
+                        </p>
+                      )}
+                      {mac.plano_atual && (
+                        <p className="text-xs text-emerald-600 font-medium">
+                          {mac.plano_atual.nome} - {mac.tempo_restante} minutos restantes
                         </p>
                       )}
                     </div>
