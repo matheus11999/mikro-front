@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Clock,
   AlertTriangle,
-  ShoppingCart
+  ShoppingCart,
+  Settings
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
@@ -34,6 +35,7 @@ import PasswordsManagement from './PasswordsManagement';
 import MacsManagement from './MacsManagement';
 import WithdrawalsManagement from './WithdrawalsManagement';
 import ReportsManagement from './ReportsManagement';
+import SiteSettings from './SiteSettings';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
 
@@ -79,6 +81,7 @@ interface TopMikrotik {
 interface TopUser {
   id: string;
   email: string;
+  nome?: string;
   total_vendas: number;
   saldo: number;
 }
@@ -293,22 +296,60 @@ function Dashboard() {
 
       setRecentSales(recentSales);
 
-      // Carregar top MikroTiks
+      // Carregar top MikroTiks com cálculos em tempo real
       const { data: topMikrotiksData } = await supabase
         .from('mikrotiks')
-        .select('id, nome, total_vendas, total_valor')
-        .order('total_valor', { ascending: false })
-        .limit(5);
+        .select(`
+          id,
+          nome,
+          vendas(valor, status)
+        `)
+        .eq('status', 'Ativo')
+        .limit(20);
 
-      // Carregar top usuários
+      // Processar dados dos MikroTiks
+      const processedMikrotiks = (topMikrotiksData || []).map(mikrotik => {
+        const vendas = (mikrotik.vendas || []).filter(v => v.status === 'aprovado');
+        const totalVendas = vendas.length;
+        const totalValor = vendas.reduce((sum, venda) => sum + Number(venda.valor || 0), 0);
+        
+        return {
+          id: mikrotik.id,
+          nome: mikrotik.nome,
+          total_vendas: totalVendas,
+          total_valor: totalValor
+        };
+      }).filter(m => m.total_vendas > 0).sort((a, b) => b.total_valor - a.total_valor).slice(0, 5);
+
+      // Carregar top usuários (clientes) com cálculos em tempo real
       const { data: topUsersData } = await supabase
-        .from('users')
-        .select('id, email, total_vendas, saldo')
+        .from('clientes')
+        .select(`
+          id,
+          email,
+          nome,
+          saldo,
+          vendas(id, status)
+        `)
         .order('saldo', { ascending: false })
-        .limit(6);
+        .limit(20);
 
-      setTopMikrotiks(topMikrotiksData || []);
-      setTopUsers(topUsersData || []);
+      // Processar dados dos usuários
+      const processedUsers = (topUsersData || []).map(user => {
+        const vendas = (user.vendas || []).filter(v => v.status === 'aprovado');
+        const totalVendas = vendas.length;
+        
+        return {
+          id: user.id,
+          email: user.email,
+          nome: user.nome,
+          total_vendas: totalVendas,
+          saldo: Number(user.saldo || 0)
+        };
+      }).filter(u => u.saldo > 0).sort((a, b) => b.saldo - a.saldo).slice(0, 6);
+
+      setTopMikrotiks(processedMikrotiks);
+      setTopUsers(processedUsers);
 
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
@@ -591,8 +632,12 @@ function Dashboard() {
                   <span className="font-bold text-blue-700">#{index + 1}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
-                  <p className="text-sm text-gray-500">{user.total_vendas} vendas</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {user.nome || user.email}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {user.total_vendas} vendas • {user.email}
+                  </p>
                 </div>
                 <div className="flex-none">
                   <span className="text-sm font-medium text-emerald-600">{formatCurrency(user.saldo)}</span>
@@ -670,6 +715,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
       badge: pendingCount > 0 ? pendingCount : undefined
     },
     { name: 'Relatórios', href: '/reports', icon: BarChart3 },
+    { name: 'Configurações', href: '/settings', icon: Settings },
   ];
 
   const isActivePath = (href: string) => {
@@ -790,6 +836,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
             <Route path="/macs" element={<MacsManagement />} />
             <Route path="/withdrawals" element={<WithdrawalsManagement />} />
             <Route path="/reports" element={<ReportsManagement />} />
+            <Route path="/settings" element={<SiteSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

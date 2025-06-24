@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Save, 
   RefreshCw, 
@@ -14,10 +14,20 @@ import {
   EyeOff,
   AlertCircle,
   CheckCircle,
-  Info
+  Info,
+  Image,
+  X,
+  Plus,
+  FileText,
+  Monitor
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface SiteSetting {
   id: string;
@@ -42,16 +52,67 @@ const categoryIcons = {
   appearance: Palette,
   system: Shield,
   localization: Settings,
+  social: Monitor,
+  security: Shield,
 };
 
 const categoryLabels = {
   general: 'Geral',
-  seo: 'SEO',
+  seo: 'SEO & Meta Tags',
   analytics: 'Analytics',
   contact: 'Contato',
   appearance: 'Aparência',
   system: 'Sistema',
   localization: 'Localização',
+  social: 'Redes Sociais',
+  security: 'Segurança',
+};
+
+const defaultSettings = {
+  // Geral
+  site_name: { label: 'Nome do Site', description: 'Nome principal do site', type: 'string', category: 'general', is_public: true },
+  site_description: { label: 'Descrição do Site', description: 'Descrição curta do site', type: 'string', category: 'general', is_public: true },
+  site_logo: { label: 'Logo do Site', description: 'URL do logo principal', type: 'file', category: 'general', is_public: true },
+  site_favicon: { label: 'Favicon', description: 'Ícone do site (32x32px)', type: 'file', category: 'general', is_public: true },
+  site_language: { label: 'Idioma', description: 'Idioma padrão do site', type: 'string', category: 'general', is_public: true },
+  
+  // SEO
+  meta_title: { label: 'Título Meta', description: 'Título principal para SEO', type: 'string', category: 'seo', is_public: true },
+  meta_description: { label: 'Descrição Meta', description: 'Descrição meta para SEO', type: 'string', category: 'seo', is_public: true },
+  meta_keywords: { label: 'Palavras-chave', description: 'Palavras-chave separadas por vírgula', type: 'string', category: 'seo', is_public: true },
+  meta_author: { label: 'Autor', description: 'Autor do site', type: 'string', category: 'seo', is_public: true },
+  robots_txt: { label: 'Robots.txt', description: 'Conteúdo do arquivo robots.txt', type: 'string', category: 'seo', is_public: true },
+  
+  // Open Graph
+  og_title: { label: 'OG Título', description: 'Título para redes sociais', type: 'string', category: 'seo', is_public: true },
+  og_description: { label: 'OG Descrição', description: 'Descrição para redes sociais', type: 'string', category: 'seo', is_public: true },
+  og_image: { label: 'OG Imagem', description: 'Imagem para compartilhamento (1200x630px)', type: 'file', category: 'seo', is_public: true },
+  og_type: { label: 'OG Tipo', description: 'Tipo de conteúdo OpenGraph', type: 'string', category: 'seo', is_public: true },
+  
+  // Twitter
+  twitter_card: { label: 'Twitter Card', description: 'Tipo de card do Twitter', type: 'string', category: 'seo', is_public: true },
+  twitter_site: { label: 'Twitter Site', description: '@username do site no Twitter', type: 'string', category: 'seo', is_public: true },
+  
+  // Aparência
+  theme_primary_color: { label: 'Cor Primária', description: 'Cor principal do tema', type: 'string', category: 'appearance', is_public: true },
+  theme_secondary_color: { label: 'Cor Secundária', description: 'Cor secundária do tema', type: 'string', category: 'appearance', is_public: true },
+  theme_dark_mode: { label: 'Modo Escuro', description: 'Ativar modo escuro por padrão', type: 'boolean', category: 'appearance', is_public: true },
+  
+  // Analytics
+  google_analytics_id: { label: 'Google Analytics ID', description: 'ID do Google Analytics (GA4)', type: 'string', category: 'analytics', is_public: false },
+  google_tag_manager_id: { label: 'Google Tag Manager ID', description: 'ID do Google Tag Manager', type: 'string', category: 'analytics', is_public: false },
+  facebook_pixel_id: { label: 'Facebook Pixel ID', description: 'ID do Facebook Pixel', type: 'string', category: 'analytics', is_public: false },
+  
+  // Contato
+  contact_email: { label: 'Email de Contato', description: 'Email principal para contato', type: 'string', category: 'contact', is_public: true },
+  contact_phone: { label: 'Telefone', description: 'Telefone para contato', type: 'string', category: 'contact', is_public: true },
+  contact_whatsapp: { label: 'WhatsApp', description: 'Número do WhatsApp', type: 'string', category: 'contact', is_public: true },
+  contact_address: { label: 'Endereço', description: 'Endereço físico', type: 'string', category: 'contact', is_public: true },
+  
+  // Sistema
+  maintenance_mode: { label: 'Modo Manutenção', description: 'Ativar modo de manutenção', type: 'boolean', category: 'system', is_public: false },
+  max_upload_size: { label: 'Tamanho Máximo Upload', description: 'Tamanho máximo em MB', type: 'number', category: 'system', is_public: false },
+  session_timeout: { label: 'Timeout da Sessão', description: 'Tempo em minutos', type: 'number', category: 'system', is_public: false },
 };
 
 export default function SiteSettings() {
@@ -61,6 +122,8 @@ export default function SiteSettings() {
   const [message, setMessage] = useState<{type: 'success' | 'error' | 'info', text: string} | null>(null);
   const [activeCategory, setActiveCategory] = useState('general');
   const [showSecrets, setShowSecrets] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<{[key: string]: boolean}>({});
+  const fileInputRefs = useRef<{[key: string]: HTMLInputElement | null}>({});
 
   useEffect(() => {
     loadSettings();
@@ -110,6 +173,113 @@ export default function SiteSettings() {
       });
       return newSettings;
     });
+  };
+
+  const handleFileUpload = async (key: string, file: File) => {
+    try {
+      setUploadingFiles(prev => ({ ...prev, [key]: true }));
+      
+      // Validar tipo de arquivo
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('Tipo de arquivo não permitido. Use: JPG, PNG, GIF, WebP ou SVG');
+      }
+
+      // Validar tamanho (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Arquivo muito grande. Máximo 5MB');
+      }
+
+      // Upload para Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${key}-${Date.now()}.${fileExt}`;
+      
+      const { data, error } = await supabase.storage
+        .from('site-assets')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('site-assets')
+        .getPublicUrl(fileName);
+
+      // Atualizar configuração
+      handleSettingChange(key, publicUrl);
+      
+      setMessage({
+        type: 'success',
+        text: 'Arquivo enviado com sucesso!'
+      });
+    } catch (error: any) {
+      console.error('Erro no upload:', error);
+      setMessage({
+        type: 'error',
+        text: 'Erro no upload: ' + error.message
+      });
+    } finally {
+      setUploadingFiles(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const initializeDefaultSettings = async () => {
+    try {
+      setSaving(true);
+      setMessage(null);
+
+      const existingKeys = Object.values(settings).flat().map(s => s.key);
+      const newSettings = [];
+
+      for (const [key, config] of Object.entries(defaultSettings)) {
+        if (!existingKeys.includes(key)) {
+          newSettings.push({
+            key,
+            value: config.type === 'boolean' ? 'false' : '',
+            type: config.type,
+            category: config.category,
+            label: config.label,
+            description: config.description,
+            is_public: config.is_public
+          });
+        }
+      }
+
+      if (newSettings.length > 0) {
+        const { error } = await supabase
+          .from('site_settings')
+          .insert(newSettings);
+
+        if (error) {
+          throw error;
+        }
+
+        setMessage({
+          type: 'success',
+          text: `${newSettings.length} configurações padrão adicionadas!`
+        });
+
+        await loadSettings();
+      } else {
+        setMessage({
+          type: 'info',
+          text: 'Todas as configurações padrão já existem.'
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro ao inicializar configurações:', error);
+      setMessage({
+        type: 'error',
+        text: 'Erro ao inicializar configurações: ' + error.message
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveSettings = async () => {
@@ -165,17 +335,16 @@ export default function SiteSettings() {
   };
 
   const renderSettingInput = (setting: SiteSetting) => {
-    const isSecret = setting.key.includes('key') || setting.key.includes('token') || setting.key.includes('secret');
+    const isSecret = setting.key.includes('key') || setting.key.includes('token') || setting.key.includes('secret') || setting.key.includes('id');
+    const isUploading = uploadingFiles[setting.key];
     
     switch (setting.type) {
       case 'boolean':
         return (
           <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
+            <Switch
               checked={setting.value === 'true'}
-              onChange={(e) => handleSettingChange(setting.key, e.target.checked ? 'true' : 'false')}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              onCheckedChange={(checked) => handleSettingChange(setting.key, checked ? 'true' : 'false')}
             />
             <span className="text-sm text-gray-600">
               {setting.value === 'true' ? 'Ativado' : 'Desativado'}
@@ -185,233 +354,245 @@ export default function SiteSettings() {
       
       case 'number':
         return (
-          <input
+          <Input
             type="number"
             value={setting.value}
             onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full"
           />
+        );
+      
+      case 'file':
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Input
+                type="text"
+                value={setting.value}
+                onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                placeholder="URL do arquivo ou faça upload"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRefs.current[setting.key]?.click()}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+            <input
+              ref={(el) => fileInputRefs.current[setting.key] = el}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  handleFileUpload(setting.key, file);
+                }
+              }}
+            />
+            {setting.value && (
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <Image className="w-4 h-4" />
+                <span>Arquivo atual: {setting.value.split('/').pop()}</span>
+              </div>
+            )}
+          </div>
         );
       
       case 'json':
         return (
-          <textarea
+          <Textarea
             value={setting.value}
             onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-            rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            placeholder='{"key": "value"}'
+            placeholder="JSON válido"
+            className="w-full min-h-[100px] font-mono text-sm"
           />
         );
       
-      default:
-        return (
-          <div className="relative">
-            <input
-              type={isSecret && !showSecrets ? 'password' : 'text'}
+      default: // string
+        if (setting.description?.includes('textarea') || setting.value.length > 100) {
+          return (
+            <Textarea
               value={setting.value}
               onChange={(e) => handleSettingChange(setting.key, e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full min-h-[80px]"
             />
-            {isSecret && (
-              <button
-                type="button"
-                onClick={() => setShowSecrets(!showSecrets)}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            )}
-          </div>
+          );
+        }
+        
+        return (
+          <Input
+            type={isSecret && !showSecrets ? 'password' : 'text'}
+            value={setting.value}
+            onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+            className="w-full"
+          />
         );
     }
   };
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-6 max-w-6xl mx-auto">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-48"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="bg-gray-200 rounded-lg h-64"></div>
-            <div className="lg:col-span-3 bg-gray-200 rounded-lg h-64"></div>
-          </div>
+          <div className="h-8 bg-gray-200 rounded w-64"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
         </div>
       </div>
     );
   }
 
-  const categories = Object.keys(settings);
+  const categories = Object.keys(categoryLabels);
+  const hasSettings = Object.keys(settings).length > 0;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Configurações do Site</h1>
-          <p className="text-gray-600 mt-1">Gerencie as configurações gerais, SEO, analytics e mais</p>
+          <p className="text-gray-600 mt-2">Configure SEO, aparência e outras opções do site</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button
+          {!hasSettings && (
+            <Button
+              onClick={initializeDefaultSettings}
+              disabled={saving}
+              variant="outline"
+            >
+              {saving ? (
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              Configurações Padrão
+            </Button>
+          )}
+          <Button
+            onClick={() => setShowSecrets(!showSecrets)}
+            variant="outline"
+            size="sm"
+          >
+            {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </Button>
+          <Button
             onClick={loadSettings}
+            variant="outline"
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Recarregar
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={saveSettings}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            <Save className={`w-4 h-4 ${saving ? 'animate-pulse' : ''}`} />
-            {saving ? 'Salvando...' : 'Salvar Alterações'}
-          </button>
+            {saving ? (
+              <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            Salvar
+          </Button>
         </div>
       </div>
 
       {message && (
-        <div className={`flex items-center gap-2 p-4 rounded-lg ${
-          message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
-          message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
-          'bg-blue-50 text-blue-700 border border-blue-200'
+        <div className={`p-4 rounded-lg border ${
+          message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+          message.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+          'bg-blue-50 border-blue-200 text-blue-800'
         }`}>
-          {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> :
-           message.type === 'error' ? <AlertCircle className="w-5 h-5" /> :
-           <Info className="w-5 h-5" />}
-          {message.text}
+          <div className="flex items-center space-x-2">
+            {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> :
+             message.type === 'error' ? <AlertCircle className="w-5 h-5" /> :
+             <Info className="w-5 h-5" />}
+            <span>{message.text}</span>
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar de categorias */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle>Categorias</CardTitle>
-              <CardDescription>Selecione uma categoria para editar</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <nav className="space-y-1">
-                {categories.map((category) => {
-                  const Icon = categoryIcons[category as keyof typeof categoryIcons] || Settings;
-                  const isActive = activeCategory === category;
-                  
-                  return (
-                    <button
-                      key={category}
-                      onClick={() => setActiveCategory(category)}
-                      className={`w-full flex items-center px-4 py-3 text-left transition-colors ${
-                        isActive 
-                          ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600' 
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
-                      <div>
-                        <p className="font-medium">
-                          {categoryLabels[category as keyof typeof categoryLabels] || category}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {settings[category]?.length || 0} configurações
-                        </p>
+      {!hasSettings ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Settings className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma configuração encontrada</h3>
+            <p className="text-gray-500 mb-4">Clique em "Configurações Padrão" para inicializar o sistema.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-6">
+            {categories.map((category) => {
+              const Icon = categoryIcons[category as keyof typeof categoryIcons];
+              const hasData = settings[category]?.length > 0;
+              return (
+                <TabsTrigger 
+                  key={category} 
+                  value={category}
+                  className="flex items-center space-x-2"
+                  disabled={!hasData}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{categoryLabels[category as keyof typeof categoryLabels]}</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          {categories.map((category) => (
+            <TabsContent key={category} value={category}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    {React.createElement(categoryIcons[category as keyof typeof categoryIcons], { className: "w-5 h-5" })}
+                    <span>{categoryLabels[category as keyof typeof categoryLabels]}</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Configure as opções de {categoryLabels[category as keyof typeof categoryLabels].toLowerCase()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {settings[category]?.map((setting) => (
+                    <div key={setting.key} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-sm font-medium text-gray-900">
+                            {setting.label}
+                          </label>
+                          {setting.description && (
+                            <p className="text-sm text-gray-500">{setting.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {!setting.is_public && (
+                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                              Privado
+                            </span>
+                          )}
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                            {setting.type}
+                          </span>
+                        </div>
                       </div>
-                    </button>
-                  );
-                })}
-              </nav>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Conteúdo das configurações */}
-        <div className="lg:col-span-3">
-          {settings[activeCategory] && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {React.createElement(
-                    categoryIcons[activeCategory as keyof typeof categoryIcons] || Settings,
-                    { className: "w-5 h-5" }
-                  )}
-                  {categoryLabels[activeCategory as keyof typeof categoryLabels] || activeCategory}
-                </CardTitle>
-                <CardDescription>
-                  Configure as opções de {(categoryLabels[activeCategory as keyof typeof categoryLabels] || activeCategory).toLowerCase()}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {settings[activeCategory].map((setting) => (
-                  <div key={setting.key} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-700">
-                        {setting.label}
-                      </label>
-                      {!setting.is_public && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                          <Shield className="w-3 h-3 mr-1" />
-                          Privado
-                        </span>
-                      )}
+                      {renderSettingInput(setting)}
                     </div>
-                    
-                    {setting.description && (
-                      <p className="text-sm text-gray-500">{setting.description}</p>
-                    )}
-                    
-                    {renderSettingInput(setting)}
-                    
-                    <div className="flex items-center justify-between text-xs text-gray-400">
-                      <span>Chave: {setting.key}</span>
-                      <span>Tipo: {setting.type}</span>
-                    </div>
-                  </div>
-                ))}
-                
-                {settings[activeCategory].length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Settings className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p>Nenhuma configuração encontrada nesta categoria</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Informações adicionais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Info className="w-5 h-5" />
-              Sobre as Configurações
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-gray-600">
-            <p>• <strong>Configurações Públicas:</strong> Visíveis para todos os usuários</p>
-            <p>• <strong>Configurações Privadas:</strong> Visíveis apenas para administradores</p>
-            <p>• <strong>Campos Secretos:</strong> Mascarados por padrão (tokens, chaves, etc.)</p>
-            <p>• <strong>Tipos:</strong> string (texto), number (número), boolean (sim/não), json (objeto)</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5" />
-              Importante
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-gray-600">
-            <p>• Alterações em configurações de SEO podem afetar o rankeamento</p>
-            <p>• Configurações de analytics requerem IDs válidos</p>
-            <p>• Modo de manutenção bloqueia acesso de usuários normais</p>
-            <p>• Sempre teste as alterações antes de aplicar em produção</p>
-          </CardContent>
-        </Card>
-      </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </div>
   );
 } 

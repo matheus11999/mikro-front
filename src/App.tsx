@@ -4,6 +4,7 @@ import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import ClientDashboard from './components/ClientDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
+import SiteHead from './components/SiteHead';
 import { supabase } from './lib/supabaseClient';
 import { checkAndRestoreSession, saveUserData, performLogout, UserData, getUserData } from './lib/authHelpers';
 import { Wifi, AlertCircle, Loader2, Server } from 'lucide-react';
@@ -317,6 +318,7 @@ const App = () => {
   // Renderizar aplicação principal
   return (
     <ErrorBoundary>
+      <SiteHead />
       <Router>
         <div className="min-h-screen bg-gray-50">
           <Routes>
