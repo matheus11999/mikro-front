@@ -5,7 +5,6 @@ import {
   CheckCircle, 
   XCircle, 
   Plus, 
-  Search, 
   DollarSign, 
   AlertCircle, 
   Eye, 
@@ -79,7 +78,7 @@ const ClientWithdrawals = () => {
   const [pixKey, setPixKey] = useState('');
   const [userWithdrawals, setUserWithdrawals] = useState<Withdrawal[]>([]);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [monthFilter, setMonthFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<Cliente | null>(null);
@@ -160,9 +159,25 @@ const ClientWithdrawals = () => {
   };
 
   const filteredWithdrawals = userWithdrawals.filter(withdrawal => {
-    const matchesSearch = withdrawal.pixkey.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || withdrawal.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    
+    let matchesMonth = true;
+    if (monthFilter !== 'all') {
+      const withdrawalDate = new Date(withdrawal.requestdate);
+      const withdrawalMonth = withdrawalDate.getMonth();
+      const withdrawalYear = withdrawalDate.getFullYear();
+      const currentYear = new Date().getFullYear();
+      
+      if (monthFilter === 'current') {
+        const currentMonth = new Date().getMonth();
+        matchesMonth = withdrawalMonth === currentMonth && withdrawalYear === currentYear;
+      } else {
+        const selectedMonth = parseInt(monthFilter);
+        matchesMonth = withdrawalMonth === selectedMonth && withdrawalYear === currentYear;
+      }
+    }
+    
+    return matchesStatus && matchesMonth;
   });
 
   const stats = {
@@ -429,15 +444,6 @@ const ClientWithdrawals = () => {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Buscar por chave PIX..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
             <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Filtrar por status" />
@@ -447,6 +453,28 @@ const ClientWithdrawals = () => {
                 <SelectItem value="pending">Pendentes</SelectItem>
                 <SelectItem value="approved">Aprovados</SelectItem>
                 <SelectItem value="rejected">Rejeitados</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Select value={monthFilter} onValueChange={(value: any) => setMonthFilter(value)}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Filtrar por mês" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os meses</SelectItem>
+                <SelectItem value="current">Mês atual</SelectItem>
+                <SelectItem value="0">Janeiro</SelectItem>
+                <SelectItem value="1">Fevereiro</SelectItem>
+                <SelectItem value="2">Março</SelectItem>
+                <SelectItem value="3">Abril</SelectItem>
+                <SelectItem value="4">Maio</SelectItem>
+                <SelectItem value="5">Junho</SelectItem>
+                <SelectItem value="6">Julho</SelectItem>
+                <SelectItem value="7">Agosto</SelectItem>
+                <SelectItem value="8">Setembro</SelectItem>
+                <SelectItem value="9">Outubro</SelectItem>
+                <SelectItem value="10">Novembro</SelectItem>
+                <SelectItem value="11">Dezembro</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -467,11 +495,11 @@ const ClientWithdrawals = () => {
               <Wallet className="w-16 h-16 mx-auto mb-4 text-gray-300" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum saque encontrado</h3>
               <p className="text-gray-600 mb-4">
-                {searchTerm || statusFilter !== 'all' 
+                {statusFilter !== 'all' || monthFilter !== 'all'
                   ? 'Tente ajustar os filtros de busca' 
                   : 'Você ainda não fez nenhuma solicitação de saque'}
               </p>
-              {!searchTerm && statusFilter === 'all' && (
+              {statusFilter === 'all' && monthFilter === 'all' && (
                 <Button onClick={() => setShowRequestModal(true)} className="bg-blue-600 hover:bg-blue-700">
                   <Plus className="w-4 h-4 mr-2" />
                   Fazer primeira solicitação
