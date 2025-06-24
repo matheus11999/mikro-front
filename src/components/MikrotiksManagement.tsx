@@ -19,7 +19,8 @@ import {
   EyeOff,
   Download,
   Activity,
-  Clock
+  Clock,
+  Pencil
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -60,6 +61,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { MikrotikStatusBadge } from './MikrotikStatusBadge';
 import { useMikrotikStatus } from '../hooks/useMikrotikStatus';
+import { formatCurrency } from '@/lib/utils';
 
 interface User {
   id: string;
@@ -78,6 +80,11 @@ interface Mikrotik {
   profitpercentage: number;
   api_token?: string;
   api_token_masked?: string;
+  online?: boolean;
+  macs_conectados?: number;
+  total_macs?: number;
+  total_vendas?: number;
+  total_valor?: number;
 }
 
 interface Plan {

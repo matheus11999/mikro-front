@@ -21,7 +21,8 @@ import {
   RefreshCw,
   AlertCircle,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  ShoppingCart
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePendingWithdrawals } from '../hooks/usePendingWithdrawals';
@@ -33,6 +34,8 @@ import PasswordsManagement from './PasswordsManagement';
 import MacsManagement from './MacsManagement';
 import WithdrawalsManagement from './WithdrawalsManagement';
 import ReportsManagement from './ReportsManagement';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/utils';
 
 interface User {
   id: string;
@@ -60,6 +63,47 @@ interface DashboardStats {
   receitaHoje: number;
   receitaSemana: number;
   receitaMes: number;
+  mikrotiksOnline: number;
+  mikrotiksTotal: number;
+  macsOnline: number;
+  macsTotal: number;
+}
+
+interface TopMikrotik {
+  id: string;
+  nome: string;
+  total_vendas: number;
+  total_valor: number;
+}
+
+interface TopUser {
+  id: string;
+  email: string;
+  total_vendas: number;
+  saldo: number;
+}
+
+interface DatabaseSale {
+  id: string;
+  mac_address: string;
+  valor: number;
+  created_at: string;
+  planos: {
+    nome: string;
+  }[];
+  mikrotiks: {
+    nome: string;
+  }[];
+  status: string;
+}
+
+interface ProcessedSale {
+  id: string;
+  mac_address: string;
+  valor: number;
+  created_at: string;
+  plano_nome: string;
+  mikrotik_nome: string;
 }
 
 // Dashboard principal
@@ -76,9 +120,15 @@ function Dashboard() {
     receitaHoje: 0,
     receitaSemana: 0,
     receitaMes: 0,
+    mikrotiksOnline: 0,
+    mikrotiksTotal: 0,
+    macsOnline: 0,
+    macsTotal: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [recentSales, setRecentSales] = useState<ProcessedSale[]>([]);
+  const [topMikrotiks, setTopMikrotiks] = useState<TopMikrotik[]>([]);
+  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const { mikrotiks: mikrotiksStatus, estatisticas: mikrotikStats, loading: mikrotikLoading } = useMikrotikStatus();
 
   useEffect(() => {
@@ -144,9 +194,18 @@ function Dashboard() {
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioSemana.toISOString()),
         supabase.from('vendas').select('preco, lucro').eq('status', 'aprovado').gte('data', inicioMes.toISOString()),
         supabase.from('vendas')
-          .select('preco, data, status, mikrotiks(nome), planos(nome)')
-          .order('data', { ascending: false })
-          .limit(5)
+          .select(`
+            id,
+            mac_address,
+            valor,
+            created_at,
+            planos(nome),
+            mikrotiks(nome),
+            status
+          `)
+          .eq('status', 'aprovado')
+          .order('created_at', { ascending: false })
+          .limit(10)
       ]);
 
       // Buscar dados detalhados dos MACs apenas dos MikroTiks ativos
@@ -201,9 +260,55 @@ function Dashboard() {
         receitaHoje: receitaHoje,
         receitaSemana: receitaSemana,
         receitaMes: receitaMes,
+        mikrotiksOnline: mikrotiksStatus?.filter(m => m.heartbeat_version).length || 0,
+        mikrotiksTotal: mikrotiksStatus?.length || 0,
+        macsOnline: macsConectados,
+        macsTotal: totalMacs,
       });
 
-      setRecentSales(recentSalesRes.data || []);
+      // Carregar vendas recentes
+      const { data: recentSalesData } = await supabase
+        .from('vendas')
+        .select(`
+          id,
+          mac_address,
+          valor,
+          created_at,
+          planos(nome),
+          mikrotiks(nome),
+          status
+        `)
+        .eq('status', 'aprovado')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const recentSales = (recentSalesData as DatabaseSale[] || []).map(sale => ({
+        id: sale.id,
+        mac_address: sale.mac_address,
+        valor: sale.valor,
+        created_at: sale.created_at,
+        plano_nome: sale.planos?.[0]?.nome || 'Plano não encontrado',
+        mikrotik_nome: sale.mikrotiks?.[0]?.nome || 'MikroTik não encontrado'
+      }));
+
+      setRecentSales(recentSales);
+
+      // Carregar top MikroTiks
+      const { data: topMikrotiksData } = await supabase
+        .from('mikrotiks')
+        .select('id, nome, total_vendas, total_valor')
+        .order('total_valor', { ascending: false })
+        .limit(5);
+
+      // Carregar top usuários
+      const { data: topUsersData } = await supabase
+        .from('users')
+        .select('id, email, total_vendas, saldo')
+        .order('saldo', { ascending: false })
+        .limit(6);
+
+      setTopMikrotiks(topMikrotiksData || []);
+      setTopUsers(topUsersData || []);
 
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
@@ -404,263 +509,129 @@ function Dashboard() {
       </div>
 
       {/* Status dos MikroTiks */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Router className="w-5 h-5" />
-          Status dos MikroTiks
-        </h3>
-        {mikrotikLoading ? (
-          <div className="animate-pulse">
-            <div className="h-12 bg-gray-200 rounded"></div>
-          </div>
-        ) : (
-          <MikrotikStatusSummary {...mikrotikStats} />
-        )}
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* MikroTik Status Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Status dos MikroTiks</CardTitle>
+            <CardDescription>Visão geral dos equipamentos</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col space-y-2 p-4 bg-green-50 rounded-lg">
+                <span className="text-sm text-green-600 font-medium">Online</span>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-2xl font-bold text-green-700">{stats.mikrotiksOnline}</span>
+                  <span className="text-sm text-green-600">equipamentos</span>
+                </div>
+              </div>
+              <div className="flex flex-col space-y-2 p-4 bg-red-50 rounded-lg">
+                <span className="text-sm text-red-600 font-medium">Offline</span>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-2xl font-bold text-red-700">{stats.mikrotiksTotal - stats.mikrotiksOnline}</span>
+                  <span className="text-sm text-red-600">equipamentos</span>
+                </div>
+              </div>
+              <div className="flex flex-col space-y-2 p-4 bg-blue-50 rounded-lg">
+                <span className="text-sm text-blue-600 font-medium">MACs Ativos</span>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-2xl font-bold text-blue-700">{stats.macsOnline}</span>
+                  <span className="text-sm text-blue-600">dispositivos</span>
+                </div>
+              </div>
+              <div className="flex flex-col space-y-2 p-4 bg-purple-50 rounded-lg">
+                <span className="text-sm text-purple-600 font-medium">Total de MACs</span>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-2xl font-bold text-purple-700">{stats.macsTotal}</span>
+                  <span className="text-sm text-purple-600">registrados</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Vendas recentes e métricas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Vendas recentes */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas Recentes</h3>
-          <div className="space-y-3">
-            {recentSales.length > 0 ? (
-              recentSales.map((sale, index) => {
-                const status = (sale as any).status;
-                const getStatusConfig = (status: string) => {
-                  switch (status) {
-                    case 'aprovado':
-                      return {
-                        bgClass: 'bg-green-50 border border-green-200',
-                        iconBg: 'bg-green-100',
-                        icon: <Wifi className="w-4 h-4 text-green-600" />,
-                        textColor: 'text-green-600',
-                        statusText: 'Aprovado'
-                      };
-                    case 'pendente':
-                      return {
-                        bgClass: 'bg-yellow-50 border border-yellow-200',
-                        iconBg: 'bg-yellow-100',
-                        icon: <Clock className="w-4 h-4 text-yellow-600 animate-pulse" />,
-                        textColor: 'text-yellow-600',
-                        statusText: 'Aguardando Pagamento'
-                      };
-                    case 'processando':
-                      return {
-                        bgClass: 'bg-blue-50 border border-blue-200',
-                        iconBg: 'bg-blue-100',
-                        icon: <Clock className="w-4 h-4 text-blue-600 animate-pulse" />,
-                        textColor: 'text-blue-600',
-                        statusText: 'Processando'
-                      };
-                    case 'autorizado':
-                      return {
-                        bgClass: 'bg-indigo-50 border border-indigo-200',
-                        iconBg: 'bg-indigo-100',
-                        icon: <Wifi className="w-4 h-4 text-indigo-600" />,
-                        textColor: 'text-indigo-600',
-                        statusText: 'Autorizado'
-                      };
-                    case 'rejeitado':
-                    case 'cancelado':
-                    case 'expirado':
-                      return {
-                        bgClass: 'bg-red-50 border border-red-200',
-                        iconBg: 'bg-red-100',
-                        icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
-                        textColor: 'text-red-600',
-                        statusText: status === 'rejeitado' ? 'Rejeitado' : 
-                                   status === 'cancelado' ? 'Cancelado' : 'Expirado'
-                      };
-                    case 'reembolsado':
-                      return {
-                        bgClass: 'bg-orange-50 border border-orange-200',
-                        iconBg: 'bg-orange-100',
-                        icon: <AlertTriangle className="w-4 h-4 text-orange-600" />,
-                        textColor: 'text-orange-600',
-                        statusText: 'Reembolsado'
-                      };
-                    case 'chargeback':
-                      return {
-                        bgClass: 'bg-purple-50 border border-purple-200',
-                        iconBg: 'bg-purple-100',
-                        icon: <AlertTriangle className="w-4 h-4 text-purple-600" />,
-                        textColor: 'text-purple-600',
-                        statusText: 'Chargeback'
-                      };
-                    default:
-                      return {
-                        bgClass: 'bg-gray-50 border border-gray-200',
-                        iconBg: 'bg-gray-100',
-                        icon: <AlertTriangle className="w-4 h-4 text-gray-600" />,
-                        textColor: 'text-gray-600',
-                        statusText: status || 'Desconhecido'
-                      };
-                  }
-                };
-
-                const statusConfig = getStatusConfig(status);
-                
-                return (
-                  <div key={index} className={`flex items-center justify-between p-3 rounded-lg ${statusConfig.bgClass}`}>
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${statusConfig.iconBg}`}>
-                        {statusConfig.icon}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {(sale as any).mikrotiks?.nome || 'MikroTik'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {(sale as any).planos?.nome || 'Plano'} - {new Date(sale.data).toLocaleDateString('pt-BR')}
-                        </p>
-                        <p className={`text-xs font-medium ${statusConfig.textColor}`}>
-                          {statusConfig.statusText}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-semibold ${statusConfig.textColor}`}>
-                        R$ {Number(sale.preco).toFixed(2)}
-                      </p>
-                    </div>
+        {/* Top MikroTiks Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Top MikroTiks</CardTitle>
+            <CardDescription>Ranking por vendas</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {topMikrotiks.map((mikrotik, index) => (
+                <div key={mikrotik.id} className="flex items-center space-x-4">
+                  <div className="flex-none w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                    <span className="font-bold text-gray-700">#{index + 1}</span>
                   </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>Nenhuma venda recente</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Métricas detalhadas */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Métricas Financeiras</h3>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <DollarSign className="w-4 h-4 text-green-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{mikrotik.nome}</p>
+                    <p className="text-sm text-gray-500">{mikrotik.total_vendas} vendas</p>
+                  </div>
+                  <div className="flex-none">
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(mikrotik.total_valor)}</span>
+                  </div>
                 </div>
-                <span className="font-medium text-gray-700">Receita Total</span>
-              </div>
-              <span className="font-bold text-green-600 text-lg">
-                R$ {stats.receitaMes.toFixed(2)}
-              </span>
+              ))}
             </div>
-
-            <div className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border border-blue-100">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-blue-600" />
-                </div>
-                <span className="font-medium text-gray-700">Lucro Total</span>
-              </div>
-              <span className="font-bold text-blue-600 text-lg">
-                R$ {stats.lucroMes.toFixed(2)}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center p-4 bg-gradient-to-r from-purple-50 to-violet-50 rounded-lg border border-purple-100">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                  <Activity className="w-4 h-4 text-purple-600" />
-                </div>
-                <span className="font-medium text-gray-700">Margem de Lucro</span>
-              </div>
-              <span className="font-bold text-purple-600 text-lg">
-                {stats.receitaMes > 0 ? ((stats.lucroMes / stats.receitaMes) * 100).toFixed(1) : 0}%
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-100">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                  <Users className="w-4 h-4 text-orange-600" />
-                </div>
-                <span className="font-medium text-gray-700">Total Clientes</span>
-              </div>
-              <span className="font-bold text-orange-600 text-lg">
-                {stats.totalClientes}
-              </span>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Status do sistema */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Status do Sistema</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
-            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-            <div>
-              <p className="font-medium text-gray-700">MikroTiks Online</p>
-              <p className="text-sm text-gray-500">
-                {mikrotikStats?.online || 0} de {mikrotikStats?.total || 0}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
-            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-            <div>
-              <p className="font-medium text-gray-700">Com Heartbeat</p>
-              <p className="text-sm text-gray-500">
-                {mikrotiksStatus?.filter(m => m.heartbeat_version).length || 0} equipamentos
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
-            <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-            <div>
-              <p className="font-medium text-gray-700">Dispositivos</p>
-              <p className="text-sm text-gray-500">{stats.macsConectados} conectados</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
-            <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
-            <div>
-              <p className="font-medium text-gray-700">Total Clientes</p>
-              <p className="text-sm text-gray-500">{stats.totalClientes} clientes</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Versões RouterOS */}
-      {mikrotiksStatus && mikrotiksStatus.filter(m => m.heartbeat_version).length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-600" />
-            Versões RouterOS em Uso
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {getVersionStats().map(([version, count], index) => (
-              <div key={version} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${
-                    index === 0 ? 'bg-blue-500' : 
-                    index === 1 ? 'bg-green-500' : 
-                    'bg-purple-500'
-                  }`} />
-                  <span className="font-mono text-sm">{version}</span>
+      {/* Top Users Card */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Top Usuários</CardTitle>
+          <CardDescription>Ranking por saldo disponível</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {topUsers.map((user, index) => (
+              <div key={user.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex-none w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="font-bold text-blue-700">#{index + 1}</span>
                 </div>
-                <span className="text-sm font-medium text-gray-600">
-                  {count} equipamento{count > 1 ? 's' : ''}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
+                  <p className="text-sm text-gray-500">{user.total_vendas} vendas</p>
+                </div>
+                <div className="flex-none">
+                  <span className="text-sm font-medium text-emerald-600">{formatCurrency(user.saldo)}</span>
+                </div>
               </div>
             ))}
-            {getVersionStats().length === 0 && (
-              <div className="col-span-full text-center text-gray-500 py-4">
-                Nenhuma versão de RouterOS detectada
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Sales Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Vendas Recentes</CardTitle>
+          <CardDescription>Últimas transações realizadas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentSales.map((sale) => (
+              <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <ShoppingCart className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{sale.mac_address}</p>
+                    <p className="text-sm text-gray-500">{sale.plano_nome}</p>
+                    <p className="text-xs text-gray-400">{new Date(sale.created_at).toLocaleString('pt-BR')}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(sale.valor)}</p>
+                  <p className="text-xs text-gray-500">{sale.mikrotik_nome}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -508,21 +508,6 @@ export default function WithdrawalsManagement() {
                       </TableCell>
                       
                       <TableCell>
-                        {withdrawal.proof_of_payment_url ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(withdrawal.proof_of_payment_url, '_blank')}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Ver
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-gray-400">Sem comprovante</span>
-                        )}
-                      </TableCell>
-                      
-                      <TableCell>
                         {withdrawal.status === 'pending' ? (
                           <div className="flex gap-2">
                             <Button

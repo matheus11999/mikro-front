@@ -26,6 +26,8 @@ import { supabase } from '@/lib/supabaseClient';
 import ClientWithdrawals from './ClientWithdrawals';
 import { MikrotikStatusBadge } from './MikrotikStatusBadge';
 import { useMikrotikStatus } from '../hooks/useMikrotikStatus';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/utils';
 
 interface User {
   id: string;
@@ -42,15 +44,11 @@ interface ClientDashboardProps {
 interface ClientStats {
   saldo: number;
   totalVendas: number;
-  receitaTotal: number;
-  mikrotiksAtivos: number;
-  macsOnline: number;
+  vendasHoje: number;
+  vendasSemana: number;
+  vendasMes: number;
   totalMacs: number;
-  // Lucro do cliente por período
-  lucroHoje: number;
-  lucroSemana: number;
-  lucroMes: number;
-  lucroTotal: number;
+  macsOnline: number;
 }
 
 interface Plano {
@@ -73,12 +71,15 @@ interface Mac {
   mikrotiks: {
     nome: string;
   } | null;
-  vendas: Venda[];
-  plano_atual?: {
-    nome: string;
-    duracao: number;
-  };
-  tempo_restante?: number;
+  vendas: {
+    id: string;
+    plano_id: {
+      id: string;
+      nome: string;
+      duracao: number;
+    };
+    pagamento_aprovado_em: string;
+  }[];
 }
 
 interface MacResponse {
@@ -100,19 +101,24 @@ interface MacResponse {
   }[];
 }
 
+interface Mikrotik {
+  id: string;
+  nome: string;
+  online: boolean;
+  version?: string;
+  uptime?: string;
+}
+
 // Dashboard principal do cliente
 function DashboardContent() {
   const [stats, setStats] = useState<ClientStats>({
     saldo: 0,
     totalVendas: 0,
-    receitaTotal: 0,
-    mikrotiksAtivos: 0,
-    macsOnline: 0,
+    vendasHoje: 0,
+    vendasSemana: 0,
+    vendasMes: 0,
     totalMacs: 0,
-    lucroHoje: 0,
-    lucroSemana: 0,
-    lucroMes: 0,
-    lucroTotal: 0
+    macsOnline: 0
   });
   const [loading, setLoading] = useState(true);
   const [recentSales, setRecentSales] = useState<any[]>([]);
@@ -125,6 +131,7 @@ function DashboardContent() {
     vendasMes: 0,
     valorMes: 0
   });
+  const [mikrotik, setMikrotik] = useState<Mikrotik | null>(null);
 
   useEffect(() => {
     loadClientData();
@@ -345,14 +352,11 @@ function DashboardContent() {
       setStats({
         saldo: saldo,
         totalVendas: userVendasTodas.length,
-        receitaTotal: receitaTotal,
-        mikrotiksAtivos: mikrotiks.length,
-        macsOnline: macsConectados,
-        totalMacs: totalMacs,
-        lucroHoje: lucroHoje,
-        lucroSemana: lucroSemana,
-        lucroMes: lucroMes,
-        lucroTotal: lucroTotal
+        vendasHoje,
+        vendasSemana,
+        vendasMes,
+        totalMacs,
+        macsOnline: macsConectados
       });
 
       setSalesStats({
@@ -367,6 +371,18 @@ function DashboardContent() {
       setRecentSales(userRecentVendas);
       setConnectedMacs(macsProcessados);
 
+      // Buscar informações do MikroTik
+      const mikrotikData = mikrotiks.find(m => m.id === userMikrotikIds[0]);
+      if (mikrotikData) {
+        setMikrotik({
+          id: mikrotikData.id,
+          nome: mikrotikData.nome,
+          online: mikrotikData.status === 'Ativo',
+          version: mikrotikData.heartbeat_version,
+          uptime: mikrotikData.heartbeat_uptime
+        });
+      }
+
     } catch (error: any) {
       console.error('❌ Erro ao carregar dados do dashboard (VPS):', error);
       
@@ -374,14 +390,11 @@ function DashboardContent() {
       setStats({
         saldo: 0,
         totalVendas: 0,
-        receitaTotal: 0,
-        mikrotiksAtivos: 0,
-        macsOnline: 0,
+        vendasHoje: 0,
+        vendasSemana: 0,
+        vendasMes: 0,
         totalMacs: 0,
-        lucroHoje: 0,
-        lucroSemana: 0,
-        lucroMes: 0,
-        lucroTotal: 0
+        macsOnline: 0
       });
       setRecentSales([]);
     } finally {
@@ -437,6 +450,29 @@ function DashboardContent() {
       default:
         return 'text-yellow-600 bg-yellow-50';
     }
+  };
+
+  // Função para calcular o tempo restante
+  const calcularTempoRestante = (mac: Mac) => {
+    if (!mac.vendas?.[0]) return null;
+    
+    const venda = mac.vendas[0];
+    const duracao = venda.plano_id.duracao; // em minutos
+    const inicio = new Date(venda.pagamento_aprovado_em);
+    const agora = new Date();
+    
+    const tempoDecorrido = Math.floor((agora.getTime() - inicio.getTime()) / (1000 * 60)); // em minutos
+    const tempoRestante = duracao - tempoDecorrido;
+    
+    if (tempoRestante <= 0) return 'Expirado';
+    
+    const horas = Math.floor(tempoRestante / 60);
+    const minutos = tempoRestante % 60;
+    
+    if (horas > 0) {
+      return `${horas}h ${minutos}m restantes`;
+    }
+    return `${minutos}m restantes`;
   };
 
   return (
@@ -507,7 +543,7 @@ function DashboardContent() {
             <div>
               <p className="text-sm font-medium text-gray-600">Lucro Total</p>
               <p className="text-2xl font-bold text-green-600">
-                R$ {stats.lucroTotal.toFixed(2)}
+                R$ {stats.totalVendas.toFixed(2)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Todas as vendas aprovadas
@@ -553,7 +589,7 @@ function DashboardContent() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">MikroTiks Ativos</p>
-              <p className="text-2xl font-bold text-purple-600">{stats.mikrotiksAtivos}</p>
+              <p className="text-2xl font-bold text-purple-600">{stats.totalMacs}</p>
               <p className="text-xs text-gray-500 mt-1">
                 Equipamentos online
               </p>
@@ -693,6 +729,135 @@ function DashboardContent() {
           </div>
         </div>
       </div>
+
+      {/* MikroTik Information */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Seu MikroTik</CardTitle>
+          <CardDescription>Informações do seu equipamento</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex flex-col space-y-1">
+              <span className="text-sm text-gray-500">Status</span>
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${mikrotik?.online ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="font-medium">{mikrotik?.online ? 'Online' : 'Offline'}</span>
+              </div>
+            </div>
+            {mikrotik?.version && (
+              <div className="flex flex-col space-y-1">
+                <span className="text-sm text-gray-500">Versão</span>
+                <span className="font-medium">{mikrotik.version}</span>
+              </div>
+            )}
+            {mikrotik?.uptime && (
+              <div className="flex flex-col space-y-1">
+                <span className="text-sm text-gray-500">Uptime</span>
+                <span className="font-medium">{mikrotik.uptime}</span>
+              </div>
+            )}
+            <div className="flex flex-col space-y-1">
+              <span className="text-sm text-gray-500">Total de MACs</span>
+              <span className="font-medium">{stats.totalMacs}</span>
+            </div>
+            <div className="flex flex-col space-y-1">
+              <span className="text-sm text-gray-500">MACs Ativos</span>
+              <span className="font-medium">{stats.macsOnline}</span>
+            </div>
+            <div className="flex flex-col space-y-1">
+              <span className="text-sm text-gray-500">Nome</span>
+              <span className="font-medium">{mikrotik?.nome || 'N/A'}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Vendas */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Vendas Hoje</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats.vendasHoje)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Vendas da Semana</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats.vendasSemana)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Vendas do Mês</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats.vendasMes)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* MACs Ativos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>MACs Ativos</CardTitle>
+          <CardDescription>Dispositivos atualmente conectados ao seu MikroTik</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {connectedMacs.length > 0 ? (
+              connectedMacs.map((mac) => (
+                <div key={mac.id} className="flex items-center justify-between p-4 rounded-lg bg-green-50 border border-green-200">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <Wifi className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 font-mono text-sm">
+                        {mac.mac_address}
+                      </p>
+                      <p className="text-sm text-blue-600 font-medium">
+                        {mac.mikrotiks?.nome || 'MikroTik'}
+                      </p>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Clock className="w-3 h-3 text-gray-500" />
+                        <p className="text-xs text-gray-500">
+                          {calcularTempoRestante(mac)}
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        Conectado desde: {new Date(mac.ultimo_acesso).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">
+                      {mac.vendas[0]?.plano_id.nome}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Wifi className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum MAC ativo no momento</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
